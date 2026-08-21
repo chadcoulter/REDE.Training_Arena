@@ -22,6 +22,9 @@ from .room_challenge import CmdChallengeDefinePublished
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
 from .room_review import CmdObjectInspect, CmdObjectVote, CmdRoomRate, CmdRoomReviews
 from .score import CmdScoreCheck, CmdScoreGuess
+from .tribbles import CmdArenaEmote, CmdTribbleDescribe, CmdTribbleShow, register_tribble_help
+
+register_tribble_help()
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -42,6 +45,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdGraffitiPaint())
         self.add(CmdScoreGuess())
         self.add(CmdScoreCheck())
+        self.add(CmdTribbleDescribe())
+        self.add(CmdTribbleShow())
+        self.add(CmdArenaEmote())
         self.add(CmdObjectCreate())
         self.add(CmdObjectDecorate())
         self.add(CmdObjectShow())
