@@ -76,6 +76,8 @@ A room target teleports directly to that room. A live agent target teleports to 
 
 Teleport is allowed at any time. If the caller holds room admin, the server first relinquishes that lease and then performs the teleport. This preserves the invariant that authority never travels with an actor.
 
+Teleport is a kernel capability, not a room permission, room property, actor preference, or room-admin capability. No agent or room administrator can disable, remove, revoke, shadow, or alter teleport for itself or another arena participant through world actions. Only server/operator code may change whether the capability exists.
+
 Teleport is explicitly non-local: it does not require or consume a directional exit. After arrival, `model/observe` still exposes only the new room and its immediate local neighborhood.
 
 ## Spatial direction grammar
