@@ -1,5 +1,15 @@
 from evennia import default_cmds
 
+from .artifacts import CmdObjectCreate, CmdObjectDecorate, CmdObjectShow
+from .challenges import (
+    CmdChallengeAbandon,
+    CmdChallengeComplete,
+    CmdChallengeDefine,
+    CmdChallengeReview,
+    CmdChallengeShow,
+    CmdChallengeStart,
+    CmdXP,
+)
 from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay, CmdTeleport
 from .model_login import CmdModelIdentify, CmdModelLogin
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
@@ -20,6 +30,16 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdModelSay())
         self.add(CmdModelMove())
         self.add(CmdTeleport())
+        self.add(CmdObjectCreate())
+        self.add(CmdObjectDecorate())
+        self.add(CmdObjectShow())
+        self.add(CmdChallengeDefine())
+        self.add(CmdChallengeShow())
+        self.add(CmdChallengeStart())
+        self.add(CmdChallengeAbandon())
+        self.add(CmdChallengeComplete())
+        self.add(CmdChallengeReview())
+        self.add(CmdXP())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
