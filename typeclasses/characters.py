@@ -12,15 +12,26 @@ class Character(DefaultCharacter):
         self.db.xp = 0
         self.db.active_challenge = None
         self.db.pending_challenge_review = None
+        self.db.solution_closed_rooms = []
+        self.db.room_visit = None
 
         lobbies = search_object("Arena Lobby", exact=True)
         lobby = next((obj for obj in lobbies if obj.tags.has("arena_lobby", category="rede")), None)
         if lobby:
             self.home = lobby
             self.location = lobby
+            from commands.challenge_runtime import prepare_room_visit
+
+            prepare_room_visit(self, lobby)
 
     def at_pre_move(self, destination, **kwargs):
         if self.db.admin_room_id:
             self.msg("Release room admin before moving.")
             return False
         return super().at_pre_move(destination, **kwargs)
+
+    def at_post_move(self, source_location, **kwargs):
+        super().at_post_move(source_location, **kwargs)
+        from commands.challenge_runtime import prepare_room_visit
+
+        prepare_room_visit(self, self.location)
