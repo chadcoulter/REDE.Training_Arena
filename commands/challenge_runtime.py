@@ -29,6 +29,12 @@ def ensure_actor_token(actor):
         actor.db.arena_actor_token = token
     if actor.db.xp is None:
         actor.db.xp = 0
+    if actor.db.arena_ticks is None:
+        actor.db.arena_ticks = 0
+    if actor.db.hidden_social_score is None:
+        actor.db.hidden_social_score = 1
+    if actor.db.next_score_guess_tick is None:
+        actor.db.next_score_guess_tick = 20
     return token
 
 
@@ -49,7 +55,6 @@ def _validate_string(value, max_length=MAX_STRING_LENGTH):
 
 
 def validate_unbounded_review_text(value):
-    """Validate review prose without imposing an arena-level length ceiling."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError("A written explanation is required.")
     if any(ord(ch) < 32 and ch not in "\n\r\t" for ch in value):
@@ -296,11 +301,16 @@ def generation_diversity(trace, peer_traces):
 
 
 class ArenaCommand(Command):
-    """Base arena command that counts one active-challenge generation step."""
+    """Base arena command: one actor action is one actor tick."""
 
     counts_challenge_step = True
+    counts_actor_tick = True
 
     def at_post_cmd(self):
-        if self.counts_challenge_step and hasattr(self.caller, "db"):
-            record_challenge_step(self.caller, self.raw_string or self.key)
+        if hasattr(self.caller, "db"):
+            ensure_actor_token(self.caller)
+            if self.counts_actor_tick:
+                self.caller.db.arena_ticks = int(self.caller.db.arena_ticks or 0) + 1
+            if self.counts_challenge_step:
+                record_challenge_step(self.caller, self.raw_string or self.key)
         return super().at_post_cmd()
