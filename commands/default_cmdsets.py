@@ -20,6 +20,7 @@ from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
 from .room_challenge import CmdChallengeDefinePublished
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
 from .room_review import CmdObjectInspect, CmdObjectVote, CmdRoomRate, CmdRoomReviews
+from .score import CmdScoreGuess
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -37,6 +38,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdModelMove())
         self.add(CmdTeleport())
         self.add(CmdGraffitiPaint())
+        self.add(CmdScoreGuess())
         self.add(CmdObjectCreate())
         self.add(CmdObjectDecorate())
         self.add(CmdObjectShow())
