@@ -17,6 +17,7 @@ class RoomArtifact(Object):
         super().at_object_creation()
         self.tags.add("room_artifact", category="arena")
         self.db.decoration = {}
+        self.db.challenge_results = {}
         self.db.challenge_id = None
         self.db.transform_signature = None
         self.db.transform_key = None
