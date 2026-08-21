@@ -2,6 +2,49 @@ from evennia import Command, create_object
 
 EXIT = "typeclasses.exits.Exit"
 
+HORIZONTAL_DIRECTIONS = (
+    "north",
+    "northeast",
+    "east",
+    "southeast",
+    "south",
+    "southwest",
+    "west",
+    "northwest",
+)
+VERTICAL_DIRECTIONS = ("up", "down")
+DIRECTIONAL_EXITS = (
+    *HORIZONTAL_DIRECTIONS,
+    *VERTICAL_DIRECTIONS,
+    *(f"up-{direction}" for direction in HORIZONTAL_DIRECTIONS),
+    *(f"down-{direction}" for direction in HORIZONTAL_DIRECTIONS),
+)
+DIRECTION_ALIASES = {
+    "n": "north",
+    "ne": "northeast",
+    "e": "east",
+    "se": "southeast",
+    "s": "south",
+    "sw": "southwest",
+    "w": "west",
+    "nw": "northwest",
+    "u": "up",
+    "d": "down",
+}
+
+
+def normalize_direction(value):
+    """Normalize accepted direction spelling into one of the 26 spatial slots."""
+    direction = value.strip().lower().replace("_", "-").replace(" ", "-")
+    direction = DIRECTION_ALIASES.get(direction, direction)
+    for prefix in ("up-", "down-"):
+        if direction.startswith(prefix):
+            suffix = direction[len(prefix) :]
+            suffix = DIRECTION_ALIASES.get(suffix, suffix)
+            direction = prefix + suffix
+            break
+    return direction if direction in DIRECTIONAL_EXITS else None
+
 
 def _require_admin(caller):
     room = caller.location
@@ -12,7 +55,7 @@ def _require_admin(caller):
 
 
 class CmdAdminDescribe(Command):
-    """Replace the description of the room currently administered."""
+    """Replace the description of a non-core room currently administered."""
 
     key = "admin/describe"
     locks = "cmd:all()"
@@ -21,6 +64,9 @@ class CmdAdminDescribe(Command):
     def func(self):
         room = _require_admin(self.caller)
         if not room:
+            return
+        if room.tags.has("exit_creation_only", category="rede"):
+            self.caller.msg("Core arena rooms are protected anchors; only exit creation is allowed here.")
             return
         text = self.args.strip()
         if not text:
@@ -31,7 +77,7 @@ class CmdAdminDescribe(Command):
 
 
 class CmdAdminOpen(Command):
-    """Open a one-way exit from the administered room to another arena room."""
+    """Open one directional exit from the administered room to another arena room."""
 
     key = "admin/open"
     locks = "cmd:all()"
@@ -42,12 +88,19 @@ class CmdAdminOpen(Command):
         if not room:
             return
         if "=" not in self.args:
-            self.caller.msg("Usage: admin/open <exit name>=<destination room>")
+            self.caller.msg("Usage: admin/open <direction>=<destination room>")
             return
 
-        exit_name, destination_name = (part.strip() for part in self.args.split("=", 1))
-        if not exit_name or not destination_name:
-            self.caller.msg("Both an exit name and destination are required.")
+        raw_direction, destination_name = (part.strip() for part in self.args.split("=", 1))
+        direction = normalize_direction(raw_direction)
+        if not direction:
+            self.caller.msg(
+                "Exit must occupy one spatial direction: north/northeast/east/southeast/"
+                "south/southwest/west/northwest, up/down, or an up-/down- diagonal."
+            )
+            return
+        if not destination_name:
+            self.caller.msg("A destination room is required.")
             return
 
         destination = self.caller.search(destination_name, global_search=True)
@@ -56,12 +109,16 @@ class CmdAdminOpen(Command):
         if not hasattr(destination, "request_admin"):
             self.caller.msg("Destination must be an arena Room.")
             return
-        if any(obj.key.lower() == exit_name.lower() for obj in room.exits):
-            self.caller.msg("An exit with that name already exists in this room.")
+
+        occupied_directions = {
+            normalize_direction(obj.key) for obj in room.exits if normalize_direction(obj.key)
+        }
+        if direction in occupied_directions:
+            self.caller.msg(f"The {direction} exit slot is already occupied in this room.")
             return
 
-        created = create_object(EXIT, key=exit_name, location=room, destination=destination)
+        created = create_object(EXIT, key=direction, location=room, destination=destination)
         self.caller.msg(
-            f"Opened one-way exit '{created.key}' from {room.key} to {destination.key}. "
+            f"Opened one-way {created.key} exit from {room.key} to {destination.key}. "
             "Creating a return exit requires admin authority in the destination room."
         )
