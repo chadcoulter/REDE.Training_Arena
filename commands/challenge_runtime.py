@@ -215,6 +215,16 @@ def mark_room_rating(actor, room, rating, comment):
     visit = current_room_visit(actor, room)
     if visit.get("rated_room"):
         return False, "This actor has already rated the room theatre for this visit.", None
+    if not room or not room.db.current_challenge_id:
+        return False, "Only challenged rooms have a Room Review Board.", None
+    board = room.db.review_board
+    if not isinstance(board, dict):
+        board = {
+            "room_id": room.id,
+            "room_key": room.key,
+            "created_for_challenge_id": room.db.current_challenge_id,
+            "evaluations": [],
+        }
     comment = validate_unbounded_review_text(comment)
     review = {
         "id": uuid4().hex,
@@ -226,9 +236,10 @@ def mark_room_rating(actor, room, rating, comment):
     visit["room_rating"] = int(rating)
     visit["room_review_id"] = review["id"]
     actor.db.room_visit = visit
-    reviews = list(room.db.theatre_reviews or [])
-    reviews.append(review)
-    room.db.theatre_reviews = reviews
+    evaluations = list(board.get("evaluations") or [])
+    evaluations.append(review)
+    board["evaluations"] = evaluations
+    room.db.review_board = board
     return True, "Room theatre evaluation recorded.", review
 
 
