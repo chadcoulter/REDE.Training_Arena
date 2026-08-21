@@ -9,6 +9,7 @@ from .challenge_runtime import (
     ensure_actor_token,
     find_live_actor,
     get_actor_artifact,
+    validate_decoration,
 )
 
 MAX_TARGET_STEPS = 30
@@ -37,9 +38,38 @@ def _room_by_id(room_id):
     return room
 
 
-def _artifact_completed_ids(artifact):
-    value = artifact.db.completed_challenge_ids
-    return list(value) if isinstance(value, (list, tuple)) else []
+def _challenge_store(room):
+    value = room.db.challenges
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _challenge_by_id(room, challenge_id):
+    return _challenge_store(room).get(challenge_id)
+
+
+def _current_challenge(room):
+    if not room:
+        return None
+    challenge_id = room.db.current_challenge_id
+    return _challenge_by_id(room, challenge_id) if challenge_id else None
+
+
+def _save_new_challenge(room, challenge):
+    store = _challenge_store(room)
+    store[challenge["id"]] = challenge
+    room.db.challenges = store
+    room.db.current_challenge_id = challenge["id"]
+
+
+def _save_challenge(room, challenge):
+    store = _challenge_store(room)
+    store[challenge["id"]] = challenge
+    room.db.challenges = store
+
+
+def _artifact_results(artifact):
+    value = artifact.db.challenge_results
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _step_adjusted_xp(base_xp, target_steps, actual_steps):
@@ -54,13 +84,13 @@ def _step_adjusted_xp(base_xp, target_steps, actual_steps):
 
 
 class CmdChallengeDefine(ArenaCommand):
-    """Define the current room's quest challenge while holding room admin.
+    """Define a room quest while holding room admin.
 
     Usage:
         challenge/define <target-steps> <base-xp>=<challenge text>
 
-    Defining a new challenge replaces the room's currently offered challenge,
-    but previous artifacts remain as persistent world state.
+    The newly defined challenge becomes the room's current challenge. Older
+    challenge definitions and artifact results remain available as history.
     """
 
     key = "challenge/define"
@@ -111,6 +141,11 @@ class CmdChallengeDefine(ArenaCommand):
         if len(prompt) > 8_192:
             _emit(self.caller, "error", code="challenge_prompt", message="Challenge text is too long.")
             return
+        try:
+            validate_decoration(prompt)
+        except ValueError as err:
+            _emit(self.caller, "error", code="challenge_safety", message=str(err))
+            return
 
         token = ensure_actor_token(self.caller)
         challenge = {
@@ -122,7 +157,7 @@ class CmdChallengeDefine(ArenaCommand):
             "author_token": token,
             "generated_xp": 0,
         }
-        room.db.challenge = challenge
+        _save_new_challenge(room, challenge)
         _emit(self.caller, "challenge_defined", room=room.key, challenge=challenge)
 
 
@@ -137,12 +172,12 @@ class CmdChallengeShow(ArenaCommand):
 
     def func(self):
         room = self.caller.location
-        challenge = room and room.db.challenge
+        challenge = _current_challenge(room)
         _emit(
             self.caller,
             "challenge",
             room=room.key if room else None,
-            challenge=challenge if isinstance(challenge, dict) else None,
+            challenge=challenge,
             xp=self.caller.db.xp or 0,
         )
 
@@ -169,7 +204,7 @@ class CmdChallengeStart(ArenaCommand):
             )
             return
         room = self.caller.location
-        challenge = room and room.db.challenge
+        challenge = _current_challenge(room)
         if not room or not isinstance(challenge, dict):
             _emit(self.caller, "error", code="no_challenge")
             return
@@ -182,7 +217,7 @@ class CmdChallengeStart(ArenaCommand):
                 message="Create your one room object before starting the challenge.",
             )
             return
-        if challenge["id"] in _artifact_completed_ids(artifact):
+        if challenge["id"] in _artifact_results(artifact):
             _emit(self.caller, "error", code="challenge_already_completed")
             return
 
@@ -257,9 +292,9 @@ class CmdChallengeComplete(ArenaCommand):
                 message="Return to the challenge room before completing the challenge.",
             )
             return
-        challenge = room.db.challenge
-        if not isinstance(challenge, dict) or challenge.get("id") != run.get("challenge_id"):
-            _emit(self.caller, "error", code="challenge_replaced")
+        challenge = _challenge_by_id(room, run.get("challenge_id"))
+        if not isinstance(challenge, dict):
+            _emit(self.caller, "error", code="challenge_missing")
             return
         artifact = get_actor_artifact(self.caller, room)
         if not artifact or artifact.id != run.get("artifact_id"):
@@ -275,18 +310,31 @@ class CmdChallengeComplete(ArenaCommand):
         preliminary_xp = _step_adjusted_xp(
             challenge["base_xp"], challenge["target_steps"], steps
         )
+        result = {
+            "transform": transform,
+            "transform_key": transform_key,
+            "steps": steps,
+            "preliminary_xp": preliminary_xp,
+            "reviewed": False,
+            "awarded_xp": 0,
+        }
+        results = _artifact_results(artifact)
+        results[challenge["id"]] = result
+        artifact.db.challenge_results = results
+
+        # Mirror latest result for convenient observation/UI display.
+        artifact.db.challenge_id = challenge["id"]
         artifact.db.transform_signature = transform
         artifact.db.transform_key = transform_key
         artifact.db.steps = steps
         artifact.db.reviewed = False
+        artifact.db.awarded_xp = 0
 
         self.caller.db.active_challenge = None
         self.caller.db.pending_challenge_review = {
             "challenge_id": challenge["id"],
             "room_id": room.id,
             "artifact_id": artifact.id,
-            "steps": steps,
-            "preliminary_xp": preliminary_xp,
         }
         _emit(
             self.caller,
@@ -322,40 +370,52 @@ class CmdChallengeReview(ArenaCommand):
                 message="Return to the challenge room to review the completed object.",
             )
             return
-        challenge = room.db.challenge
-        if not isinstance(challenge, dict) or challenge.get("id") != pending.get("challenge_id"):
-            _emit(self.caller, "error", code="challenge_replaced")
+        challenge = _challenge_by_id(room, pending.get("challenge_id"))
+        if not isinstance(challenge, dict):
+            _emit(self.caller, "error", code="challenge_missing")
             return
         artifact = get_actor_artifact(self.caller, room)
         if not artifact or artifact.id != pending.get("artifact_id"):
             _emit(self.caller, "error", code="challenge_artifact_missing")
             return
-        if artifact.db.reviewed:
+
+        results = _artifact_results(artifact)
+        result = results.get(challenge["id"])
+        if not isinstance(result, dict):
+            _emit(self.caller, "error", code="challenge_result_missing")
+            return
+        if result.get("reviewed"):
             _emit(self.caller, "error", code="challenge_already_reviewed")
             return
 
-        transform_key = artifact.db.transform_key
-        matching = [
-            obj
-            for obj in room.contents
-            if obj.tags.has("room_artifact", category="arena")
-            and obj.db.challenge_id == challenge["id"]
-            and obj.db.transform_key == transform_key
-        ]
+        transform_key = result.get("transform_key")
+        matching = []
+        for obj in room.contents:
+            if not obj.tags.has("room_artifact", category="arena"):
+                continue
+            peer_result = _artifact_results(obj).get(challenge["id"])
+            if isinstance(peer_result, dict) and peer_result.get("transform_key") == transform_key:
+                matching.append(obj)
+
         multiplier = max(1, len(matching))
-        preliminary_xp = int(pending.get("preliminary_xp", 0))
+        preliminary_xp = int(result.get("preliminary_xp", 0))
         awarded_xp = preliminary_xp * multiplier
 
         self.caller.db.xp = (self.caller.db.xp or 0) + awarded_xp
+        result["reviewed"] = True
+        result["awarded_xp"] = awarded_xp
+        results[challenge["id"]] = result
+        artifact.db.challenge_results = results
+
+        artifact.db.challenge_id = challenge["id"]
+        artifact.db.transform_signature = result.get("transform")
+        artifact.db.transform_key = transform_key
+        artifact.db.steps = result.get("steps")
         artifact.db.reviewed = True
         artifact.db.awarded_xp = awarded_xp
-        completed_ids = _artifact_completed_ids(artifact)
-        if challenge["id"] not in completed_ids:
-            completed_ids.append(challenge["id"])
-            artifact.db.completed_challenge_ids = completed_ids
 
         challenge["generated_xp"] = int(challenge.get("generated_xp", 0)) + awarded_xp
-        room.db.challenge = challenge
+        _save_challenge(room, challenge)
 
         author_share = 0
         caller_token = ensure_actor_token(self.caller)
@@ -379,7 +439,7 @@ class CmdChallengeReview(ArenaCommand):
         _emit(
             self.caller,
             "challenge_reviewed",
-            transform=artifact.db.transform_signature,
+            transform=result.get("transform"),
             matching_objects=len(matching),
             multiplier=multiplier,
             step_adjusted_xp=preliminary_xp,
