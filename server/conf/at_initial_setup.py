@@ -7,6 +7,7 @@ EXIT = "typeclasses.exits.Exit"
 def _room(key, desc, *, lobby=False):
     room = create_object(ROOM, key=key)
     room.db.desc = desc
+    room.db.graffiti_cells = {}
     room.tags.add("core_room", category="rede")
     room.tags.add("exit_creation_only", category="rede")
     if lobby:
