@@ -1,6 +1,7 @@
 from evennia import default_cmds
 
 from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay
+from .model_login import CmdModelConnect
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
 
@@ -25,7 +26,11 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
-    pass
+    """Login screen commands plus ephemeral model admission."""
+
+    def at_cmdset_creation(self):
+        super().at_cmdset_creation()
+        self.add(CmdModelConnect())
 
 
 class SessionCmdSet(default_cmds.SessionCmdSet):
