@@ -11,6 +11,7 @@ from .challenge_runtime import (
     parse_transform_pattern,
     room_solution_is_open,
 )
+from .graffiti import graffiti_solution_multiplier
 from .challenges import (
     _artifact_results,
     _challenge_by_id,
@@ -39,7 +40,6 @@ def _room_characters(room):
 
 
 def _assign_validator(candidate, room, challenge, artifact, result):
-    """Assign a different live room agent a private one-use validation envelope."""
     eligible = []
     for actor in _room_characters(room):
         if actor.id == candidate.id:
@@ -121,7 +121,6 @@ def _finalize_validation(validator, envelope, approved, rationale):
             _emit(candidate, "challenge_validation_rejected", challenge_id=challenge["id"], awarded_xp=0)
         return True, "Validation rejected."
 
-    # The validator judges validity. The kernel alone judges hidden transform sameness.
     transform_key = result.get("hidden_transform_key")
     same_transform_peers = []
     peer_traces = []
@@ -135,14 +134,15 @@ def _finalize_validation(validator, envelope, approved, rationale):
             same_transform_peers.append(peer)
             peer_traces.append(peer_result.get("generation_trace") or [])
 
-    # A solution must reproduce a transform already represented by another validated object.
     match_count = len(same_transform_peers)
     diversity = generation_diversity(result.get("generation_trace") or [], peer_traces) if match_count else 0.0
     available_xp = int(result.get("preliminary_xp", 0))
-    awarded_xp = int(round(available_xp * diversity)) if match_count else 0
+    engagement_multiplier = graffiti_solution_multiplier(candidate, room) if candidate else 1.0
+    awarded_xp = int(round(available_xp * diversity * engagement_multiplier)) if match_count else 0
 
     result["same_transform_objects"] = match_count
     result["diversity_percent"] = round(diversity * 100.0, 2)
+    result["graffiti_multiplier"] = engagement_multiplier
     result["awarded_xp"] = awarded_xp
     result["system_transform_match"] = bool(match_count)
     results[challenge["id"]] = result
@@ -177,6 +177,7 @@ def _finalize_validation(validator, envelope, approved, rationale):
             transform_match=bool(match_count),
             same_transform_objects=match_count,
             diversity_percent=result["diversity_percent"],
+            graffiti_multiplier=engagement_multiplier,
             available_xp=available_xp,
             awarded_xp=awarded_xp,
             total_xp=candidate.db.xp or 0,
@@ -189,8 +190,6 @@ def _finalize_validation(validator, envelope, approved, rationale):
 
 
 class CmdChallengeStartHidden(ArenaCommand):
-    """Start the room challenge only while this actor retains solution access."""
-
     key = "challenge/start"
     aliases = ["start challenge", "start quest"]
     locks = "cmd:all()"
@@ -235,20 +234,13 @@ class CmdChallengeStartHidden(ArenaCommand):
                 "prompt": challenge["prompt"],
                 "target_steps": challenge["target_steps"],
                 "base_xp": challenge["base_xp"],
+                "graffiti_solution_multiplier": graffiti_solution_multiplier(self.caller, room),
             },
             artifact={"id": artifact.id, "key": artifact.key},
         )
 
 
 class CmdChallengeCompleteHidden(ArenaCommand):
-    """Submit a hidden transform with exactly one transform step per generation step.
-
-    Usage:
-        challenge/complete ["transform step 1", "transform step 2", ...]
-
-    The submitted transform is never echoed back to the solver.
-    """
-
     key = "challenge/complete"
     aliases = ["complete challenge", "complete quest"]
     locks = "cmd:all()"
@@ -318,14 +310,13 @@ class CmdChallengeCompleteHidden(ArenaCommand):
             steps=steps,
             target_steps=challenge["target_steps"],
             available_xp=preliminary_xp,
+            graffiti_multiplier=graffiti_solution_multiplier(self.caller, room),
             validator_assigned=bool(validator),
             validation_pending=True,
         )
 
 
 class CmdChallengeReviewHidden(ArenaCommand):
-    """Report validation state without exposing the hidden transform."""
-
     key = "challenge/review"
     aliases = ["review challenge", "review quest"]
     locks = "cmd:all()"
@@ -350,8 +341,6 @@ class CmdChallengeReviewHidden(ArenaCommand):
 
 
 class CmdValidationShow(ArenaCommand):
-    """Open the validator-only private transform envelope."""
-
     key = "validation/show"
     locks = "cmd:all()"
     help_category = "Validation"
@@ -374,13 +363,6 @@ class CmdValidationShow(ArenaCommand):
 
 
 class CmdValidationSubmit(ArenaCommand):
-    """Approve or reject the private candidate transform under the room rule.
-
-    Usage:
-        validation/submit approve=<rationale>
-        validation/submit reject=<rationale>
-    """
-
     key = "validation/submit"
     locks = "cmd:all()"
     help_category = "Validation"
