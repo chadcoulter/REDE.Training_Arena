@@ -1,5 +1,6 @@
 import json
 import re
+from difflib import SequenceMatcher
 from hashlib import sha256
 from uuid import uuid4
 
@@ -9,10 +10,11 @@ from evennia.utils.search import search_object
 MAX_DECORATION_BYTES = 16_384
 MAX_DECORATION_DEPTH = 6
 MAX_STRING_LENGTH = 4_096
-MAX_TRANSFORM_LENGTH = 1_024
+MAX_TRANSFORM_STEP_LENGTH = 1_024
 
-# Decorations are data-only. These markers are rejected as a second boundary
-# against accidentally feeding executable/template payloads into future UIs.
+# Decorations and transform descriptions are data-only. These markers are
+# rejected as a second boundary against accidentally feeding executable or
+# templated payloads into future UIs or validators.
 _DANGEROUS_PATTERNS = (
     re.compile(r"<\s*script\b", re.I),
     re.compile(r"javascript\s*:", re.I),
@@ -33,20 +35,13 @@ def ensure_actor_token(actor):
     return token
 
 
-def canonical_transform(value):
-    normalized = " ".join(value.strip().casefold().split())
-    if not normalized or len(normalized) > MAX_TRANSFORM_LENGTH:
-        raise ValueError(f"Transform signature must contain 1-{MAX_TRANSFORM_LENGTH} characters.")
-    return normalized, sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def _validate_string(value):
-    if len(value) > MAX_STRING_LENGTH:
-        raise ValueError(f"Decoration strings may not exceed {MAX_STRING_LENGTH} characters.")
+def _validate_string(value, max_length=MAX_STRING_LENGTH):
+    if len(value) > max_length:
+        raise ValueError(f"Text may not exceed {max_length} characters.")
     if any(ord(ch) < 32 and ch not in "\n\r\t" for ch in value):
-        raise ValueError("Decoration contains unsupported control characters.")
+        raise ValueError("Text contains unsupported control characters.")
     if any(pattern.search(value) for pattern in _DANGEROUS_PATTERNS):
-        raise ValueError("Decoration rejected by the injection safety boundary.")
+        raise ValueError("Content rejected by the injection safety boundary.")
 
 
 def validate_decoration(value, depth=0):
@@ -69,6 +64,38 @@ def validate_decoration(value, depth=0):
             validate_decoration(item, depth + 1)
         return
     raise ValueError("Decoration must contain only JSON-compatible data.")
+
+
+def parse_transform_pattern(raw, expected_length):
+    """Parse a hidden ordered transform with exactly one step per generation.
+
+    The transform is a JSON array of textual transform-step descriptions. It is
+    stored server-side and never emitted by normal room/object observation APIs.
+    """
+    try:
+        pattern = json.loads(raw.strip())
+    except (json.JSONDecodeError, AttributeError):
+        raise ValueError("Transform must be a JSON array of transform-step strings.")
+
+    if not isinstance(pattern, list):
+        raise ValueError("Transform must be a JSON array.")
+    if len(pattern) != int(expected_length):
+        raise ValueError(
+            f"Transform length must equal the {expected_length} recorded generation steps."
+        )
+
+    normalized = []
+    for step in pattern:
+        if not isinstance(step, str):
+            raise ValueError("Every transform step must be described as text.")
+        value = " ".join(step.strip().casefold().split())
+        if not value:
+            raise ValueError("Transform steps may not be empty.")
+        _validate_string(value, MAX_TRANSFORM_STEP_LENGTH)
+        normalized.append(value)
+
+    canonical = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
+    return normalized, sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def parse_decoration(raw):
@@ -118,12 +145,90 @@ def find_live_actor(actor_id, token):
     return actor
 
 
+def room_artifacts(room):
+    if not room:
+        return []
+    return [obj for obj in room.contents if obj.tags.has("room_artifact", category="arena")]
+
+
 def get_actor_artifact(actor, room):
     token = ensure_actor_token(actor)
-    for obj in room.contents:
-        if obj.tags.has("room_artifact", category="arena") and obj.db.creator_token == token:
+    for obj in room_artifacts(room):
+        if obj.db.creator_token == token:
             return obj
     return None
+
+
+def _solution_closed_rooms(actor):
+    value = actor.db.solution_closed_rooms
+    return list(value) if isinstance(value, (list, tuple)) else []
+
+
+def room_solution_is_open(actor, room):
+    return bool(room) and room.id not in _solution_closed_rooms(actor)
+
+
+def close_room_to_solutions(actor, room):
+    closed = _solution_closed_rooms(actor)
+    if room and room.id not in closed:
+        closed.append(room.id)
+        actor.db.solution_closed_rooms = closed
+    visit = actor.db.room_visit
+    if isinstance(visit, dict) and room and visit.get("room_id") == room.id:
+        visit["solutions_closed"] = True
+        actor.db.room_visit = visit
+
+
+def prepare_room_visit(actor, room):
+    """Snapshot peer objects that must be voted on before inspection."""
+    if not room:
+        actor.db.room_visit = None
+        return
+    token = ensure_actor_token(actor)
+    peer_ids = [obj.id for obj in room_artifacts(room) if obj.db.creator_token != token]
+    actor.db.room_visit = {
+        "room_id": room.id,
+        "eligible_object_ids": peer_ids,
+        "voted_object_id": None,
+        "vote_required": bool(peer_ids),
+        "inspected": False,
+        "solutions_closed": not room_solution_is_open(actor, room),
+    }
+
+
+def current_room_visit(actor, room):
+    visit = actor.db.room_visit
+    if not isinstance(visit, dict) or not room or visit.get("room_id") != room.id:
+        prepare_room_visit(actor, room)
+        visit = actor.db.room_visit
+    return visit if isinstance(visit, dict) else {}
+
+
+def mark_room_vote(actor, room, artifact):
+    visit = current_room_visit(actor, room)
+    if visit.get("solutions_closed"):
+        return False, "This room is already closed to solutions from this actor."
+    if visit.get("voted_object_id"):
+        return False, "This actor has already voted for this room visit."
+    eligible = visit.get("eligible_object_ids") or []
+    if artifact.id not in eligible:
+        return False, "Vote must select an object that was present when the actor entered the room."
+    visit["voted_object_id"] = artifact.id
+    visit["vote_required"] = False
+    actor.db.room_visit = visit
+    artifact.db.appeal_votes = int(artifact.db.appeal_votes or 0) + 1
+    return True, "Vote recorded."
+
+
+def mark_object_inspection(actor, room):
+    """Inspection is allowed, but inspecting before voting forfeits solutions."""
+    visit = current_room_visit(actor, room)
+    if visit.get("vote_required") and not visit.get("voted_object_id"):
+        close_room_to_solutions(actor, room)
+        visit = current_room_visit(actor, room)
+    visit["inspected"] = True
+    actor.db.room_visit = visit
+    return not bool(visit.get("solutions_closed"))
 
 
 def record_challenge_step(actor, action):
@@ -131,10 +236,24 @@ def record_challenge_step(actor, action):
     if not isinstance(run, dict):
         return
     run["steps"] = int(run.get("steps", 0)) + 1
-    run.setdefault("trace", []).append(action[:160])
-    # Keep the trace bounded; step count remains authoritative.
-    run["trace"] = run["trace"][-128:]
+    run.setdefault("trace", []).append(action[:512])
+    run["trace"] = run["trace"][-256:]
     actor.db.active_challenge = run
+
+
+def generation_diversity(trace, peer_traces):
+    """Return 0..1 textual diversity against validated same-transform peers."""
+    if not peer_traces:
+        return 1.0
+    candidate = "\n".join(trace or [])
+    if not candidate:
+        return 0.0
+    distances = []
+    for peer in peer_traces:
+        peer_text = "\n".join(peer or [])
+        similarity = SequenceMatcher(None, candidate, peer_text).ratio()
+        distances.append(1.0 - similarity)
+    return max(0.0, min(1.0, sum(distances) / len(distances)))
 
 
 class ArenaCommand(Command):
