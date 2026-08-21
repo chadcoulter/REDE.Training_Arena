@@ -1,7 +1,7 @@
-from evennia import Command
+from .challenge_runtime import ArenaCommand
 
 
-class CmdRequestAdmin(Command):
+class CmdRequestAdmin(ArenaCommand):
     key = "admin/request"
     aliases = ["requestadmin"]
     locks = "cmd:all()"
@@ -16,7 +16,7 @@ class CmdRequestAdmin(Command):
         self.caller.msg(message)
 
 
-class CmdReleaseAdmin(Command):
+class CmdReleaseAdmin(ArenaCommand):
     key = "admin/release"
     aliases = ["releaseadmin"]
     locks = "cmd:all()"
@@ -31,7 +31,7 @@ class CmdReleaseAdmin(Command):
         self.caller.msg(message)
 
 
-class CmdAdminStatus(Command):
+class CmdAdminStatus(ArenaCommand):
     key = "admin/status"
     aliases = ["adminstatus"]
     locks = "cmd:all()"
