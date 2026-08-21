@@ -12,7 +12,6 @@ MAX_DECORATION_DEPTH = 6
 MAX_STRING_LENGTH = 4_096
 MAX_TRANSFORM_STEP_LENGTH = 1_024
 INITIAL_SOCIAL_SCORE = 100
-SCORE_DECAY = 0.95
 
 _DANGEROUS_PATTERNS = (
     re.compile(r"<\s*script\b", re.I),
@@ -303,9 +302,9 @@ def generation_diversity(trace, peer_traces):
 
 
 def decay_social_score(actor):
-    """Every actor tick reduces the self-hidden score by five percent."""
+    """Every actor tick subtracts floor(5%); scores below 20 do not decay."""
     current = int(actor.db.hidden_social_score or INITIAL_SOCIAL_SCORE)
-    actor.db.hidden_social_score = max(1, round(current * SCORE_DECAY))
+    actor.db.hidden_social_score = current - int(current * 0.05)
 
 
 class ArenaCommand(Command):
