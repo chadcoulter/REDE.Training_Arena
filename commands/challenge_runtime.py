@@ -48,6 +48,17 @@ def _validate_string(value, max_length=MAX_STRING_LENGTH):
         raise ValueError("Content rejected by the injection safety boundary.")
 
 
+def validate_unbounded_review_text(value):
+    """Validate review prose without imposing an arena-level length ceiling."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("A written explanation is required.")
+    if any(ord(ch) < 32 and ch not in "\n\r\t" for ch in value):
+        raise ValueError("Review contains unsupported control characters.")
+    if any(pattern.search(value) for pattern in _DANGEROUS_PATTERNS):
+        raise ValueError("Review rejected by the injection safety boundary.")
+    return value.strip()
+
+
 def validate_decoration(value, depth=0):
     if depth > MAX_DECORATION_DEPTH:
         raise ValueError("Decoration nesting is too deep.")
@@ -184,6 +195,7 @@ def prepare_room_visit(actor, room):
         "eligible_object_ids": peer_ids,
         "rated_room": False,
         "room_rating": None,
+        "room_review_id": None,
         "voted_object_id": None,
         "vote_required": bool(peer_ids),
         "inspected": False,
@@ -199,17 +211,25 @@ def current_room_visit(actor, room):
     return visit if isinstance(visit, dict) else {}
 
 
-def mark_room_rating(actor, room, rating):
+def mark_room_rating(actor, room, rating, comment):
     visit = current_room_visit(actor, room)
     if visit.get("rated_room"):
-        return False, "This actor has already rated the room theatre for this visit."
+        return False, "This actor has already rated the room theatre for this visit.", None
+    comment = validate_unbounded_review_text(comment)
+    review = {
+        "id": uuid4().hex,
+        "rating": int(rating),
+        "comment": comment,
+        "reviewer": actor.key,
+    }
     visit["rated_room"] = True
     visit["room_rating"] = int(rating)
+    visit["room_review_id"] = review["id"]
     actor.db.room_visit = visit
-    ratings = list(room.db.theatre_ratings or [])
-    ratings.append(int(rating))
-    room.db.theatre_ratings = ratings[-10000:]
-    return True, "Room theatre rating recorded."
+    reviews = list(room.db.theatre_reviews or [])
+    reviews.append(review)
+    room.db.theatre_reviews = reviews
+    return True, "Room theatre evaluation recorded.", review
 
 
 def mark_room_vote(actor, room, artifact):
