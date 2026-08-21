@@ -113,7 +113,7 @@ class CmdModelIdentify(COMMAND_DEFAULT_CLASS):
 
         lobby_matches = search_object("Arena Lobby")
         lobby = next(
-            (room for room in lobby_matches if room.tags.has("arena_lobby", category="arena")),
+            (room for room in lobby_matches if room.tags.has("arena_lobby", category="rede")),
             None,
         )
         if not lobby:
