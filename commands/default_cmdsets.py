@@ -3,7 +3,6 @@ from evennia import default_cmds
 from .artifacts import CmdObjectCreate, CmdObjectDecorate, CmdObjectShow
 from .challenges import (
     CmdChallengeAbandon,
-    CmdChallengeDefine,
     CmdChallengeShow,
     CmdXP,
 )
@@ -17,6 +16,7 @@ from .hidden_challenges import (
 from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay, CmdTeleport
 from .model_login import CmdModelIdentify, CmdModelLogin
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
+from .room_challenge import CmdChallengeDefinePublished
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
 from .room_review import CmdObjectInspect, CmdObjectVote
 
@@ -40,7 +40,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdObjectShow())
         self.add(CmdObjectVote())
         self.add(CmdObjectInspect())
-        self.add(CmdChallengeDefine())
+        self.add(CmdChallengeDefinePublished())
         self.add(CmdChallengeShow())
         self.add(CmdChallengeStartHidden())
         self.add(CmdChallengeAbandon())
