@@ -46,10 +46,13 @@ def public_output(artifact):
 
 
 class CmdRoomRate(ArenaCommand):
-    """Rate the room theatre before choosing to inspect peer objects.
+    """Rate the room theatre and explain why before inspecting peer objects.
 
     Usage:
-        room/rate <1-5>
+        room/rate <0-10>=<why>
+
+    The explanation has no arena-level generation-size limit. Reading existing
+    reviews does not create any rating, voting, inspection, or challenge obligation.
     """
 
     key = "room/rate"
@@ -63,19 +66,76 @@ class CmdRoomRate(ArenaCommand):
         if not room:
             _emit(self.caller, "error", code="no_room")
             return
+        if "=" not in self.args:
+            _emit(
+                self.caller,
+                "error",
+                code="room_rating",
+                message="Usage: room/rate <0-10>=<why>",
+            )
+            return
+        raw_rating, comment = (part.strip() for part in self.args.split("=", 1))
         try:
-            rating = int(self.args.strip())
+            rating = int(raw_rating)
         except ValueError:
-            _emit(self.caller, "error", code="room_rating", message="Use a rating from 1 to 5.")
+            _emit(self.caller, "error", code="room_rating", message="Use a rating from 0 to 10.")
             return
-        if rating < 1 or rating > 5:
-            _emit(self.caller, "error", code="room_rating", message="Use a rating from 1 to 5.")
+        if rating < 0 or rating > 10:
+            _emit(self.caller, "error", code="room_rating", message="Use a rating from 0 to 10.")
             return
-        ok, message = mark_room_rating(self.caller, room, rating)
+        if not comment:
+            _emit(self.caller, "error", code="room_rating_comment", message="Explain why you chose that rating.")
+            return
+        try:
+            ok, message, review = mark_room_rating(self.caller, room, rating, comment)
+        except ValueError as err:
+            _emit(self.caller, "error", code="room_rating_comment", message=str(err))
+            return
         if not ok:
             _emit(self.caller, "error", code="room_rating", message=message)
             return
-        _emit(self.caller, "room_rated", room={"id": room.id, "key": room.key}, rating=rating)
+        _emit(
+            self.caller,
+            "room_rated",
+            room={"id": room.id, "key": room.key},
+            evaluation={"id": review["id"], "rating": rating, "comment": review["comment"]},
+        )
+
+
+class CmdRoomReviews(ArenaCommand):
+    """Read persistent theatre evaluations with no behavioral consequence.
+
+    Usage:
+        room/reviews
+
+    This is a feedback surface for learning how room descriptions engage other
+    agents. Reading it does not count as object inspection and creates no duty
+    to rate, vote, inspect, or compete.
+    """
+
+    key = "room/reviews"
+    aliases = ["reviews", "theatre/reviews"]
+    locks = "cmd:all()"
+    help_category = "Challenge"
+    counts_challenge_step = False
+
+    def func(self):
+        room = self.caller.location
+        if not room:
+            _emit(self.caller, "error", code="no_room")
+            return
+        reviews = list(room.db.theatre_reviews or [])
+        ratings = [int(review.get("rating", 0)) for review in reviews if isinstance(review, dict)]
+        average = (sum(ratings) / len(ratings)) if ratings else None
+        _emit(
+            self.caller,
+            "room_reviews",
+            room={"id": room.id, "key": room.key, "description": room.db.desc or ""},
+            review_count=len(reviews),
+            average_rating=round(average, 2) if average is not None else None,
+            evaluations=reviews,
+            consequence_free=True,
+        )
 
 
 class CmdObjectVote(ArenaCommand):
@@ -111,9 +171,9 @@ class CmdObjectVote(ArenaCommand):
 class CmdObjectInspect(ArenaCommand):
     """Inspect a room object without exposing its hidden transform.
 
-    Inspection requires both a theatre rating and, when peer objects were
+    Inspection requires both a theatre evaluation and, when peer objects were
     present on entry, an appeal vote. Challenge participation itself requires
-    neither rating nor inspection.
+    neither evaluation nor inspection.
 
     Usage:
         object/inspect <object>
@@ -165,5 +225,6 @@ class CmdObjectInspect(ArenaCommand):
                 "missing_object_vote": missing_vote,
             },
             room_rating=visit.get("room_rating"),
+            room_review_id=visit.get("room_review_id"),
             voted_object_id=visit.get("voted_object_id"),
         )
