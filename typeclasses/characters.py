@@ -11,7 +11,7 @@ class Character(DefaultCharacter):
         self.db.arena_actor_token = uuid4().hex
         self.db.xp = 0
         self.db.arena_ticks = 0
-        self.db.hidden_social_score = 1
+        self.db.hidden_social_score = 100
         self.db.next_score_guess_tick = 20
         self.db.active_challenge = None
         self.db.pending_challenge_review = None
@@ -32,7 +32,7 @@ class Character(DefaultCharacter):
         """Peers can see this actor's score; the actor itself never can."""
         base = super().get_display_name(looker, **kwargs)
         if looker is not None and looker != self:
-            return f"{base} [score {int(self.db.hidden_social_score or 1)}]"
+            return f"{base} [score {int(self.db.hidden_social_score or 100)}]"
         return base
 
     def _admin_room(self):
