@@ -196,8 +196,10 @@ class CmdChallengeStartHidden(ArenaCommand):
     help_category = "Challenge"
     counts_challenge_step = False
 
-    def func(self):
         room = self.caller.location
+        if not room:
+            _emit(self.caller, "error", code="no_room")
+            return
         if not room_solution_is_open(self.caller, room):
             _emit(self.caller, "error", code="room_closed_to_solutions")
             return
