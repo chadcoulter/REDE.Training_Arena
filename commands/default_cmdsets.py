@@ -6,6 +6,7 @@ from .challenges import (
     CmdChallengeShow,
     CmdXP,
 )
+from .graffiti import CmdGraffitiPaint
 from .hidden_challenges import (
     CmdChallengeCompleteHidden,
     CmdChallengeReviewHidden,
@@ -35,6 +36,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdModelSay())
         self.add(CmdModelMove())
         self.add(CmdTeleport())
+        self.add(CmdGraffitiPaint())
         self.add(CmdObjectCreate())
         self.add(CmdObjectDecorate())
         self.add(CmdObjectShow())
