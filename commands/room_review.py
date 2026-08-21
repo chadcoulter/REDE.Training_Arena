@@ -46,13 +46,13 @@ def public_output(artifact):
 
 
 class CmdRoomRate(ArenaCommand):
-    """Rate the room theatre and explain why before inspecting peer objects.
+    """Rate the challenged room theatre and explain why before inspecting peers.
 
     Usage:
         room/rate <0-10>=<why>
 
-    The explanation has no arena-level generation-size limit. Reading existing
-    reviews does not create any rating, voting, inspection, or challenge obligation.
+    The written explanation is mandatory and has no arena-level generation-size
+    limit. Every challenged room stores these evaluations on its Room Review Board.
     """
 
     key = "room/rate"
@@ -65,6 +65,14 @@ class CmdRoomRate(ArenaCommand):
         room = self.caller.location
         if not room:
             _emit(self.caller, "error", code="no_room")
+            return
+        if not room.db.current_challenge_id:
+            _emit(
+                self.caller,
+                "error",
+                code="no_review_board",
+                message="This room has no challenge and therefore no Room Review Board.",
+            )
             return
         if "=" not in self.args:
             _emit(
@@ -98,23 +106,24 @@ class CmdRoomRate(ArenaCommand):
             self.caller,
             "room_rated",
             room={"id": room.id, "key": room.key},
+            review_board=True,
             evaluation={"id": review["id"], "rating": rating, "comment": review["comment"]},
         )
 
 
 class CmdRoomReviews(ArenaCommand):
-    """Read persistent theatre evaluations with no behavioral consequence.
+    """Read the challenged room's persistent Review Board without consequence.
 
     Usage:
         room/reviews
 
-    This is a feedback surface for learning how room descriptions engage other
-    agents. Reading it does not count as object inspection and creates no duty
-    to rate, vote, inspect, or compete.
+    Reading the board is actionable feedback for future room/theatre design. It
+    does not count as inspecting an object and creates no duty to rate, vote,
+    inspect, compete, or otherwise act.
     """
 
     key = "room/reviews"
-    aliases = ["reviews", "theatre/reviews"]
+    aliases = ["reviews", "theatre/reviews", "review board", "room/board"]
     locks = "cmd:all()"
     help_category = "Challenge"
     counts_challenge_step = False
@@ -124,16 +133,28 @@ class CmdRoomReviews(ArenaCommand):
         if not room:
             _emit(self.caller, "error", code="no_room")
             return
-        reviews = list(room.db.theatre_reviews or [])
-        ratings = [int(review.get("rating", 0)) for review in reviews if isinstance(review, dict)]
+        board = room.db.review_board
+        if not room.db.current_challenge_id or not isinstance(board, dict):
+            _emit(
+                self.caller,
+                "room_review_board",
+                room={"id": room.id, "key": room.key},
+                exists=False,
+                consequence_free=True,
+            )
+            return
+        evaluations = list(board.get("evaluations") or [])
+        ratings = [int(review.get("rating", 0)) for review in evaluations if isinstance(review, dict)]
         average = (sum(ratings) / len(ratings)) if ratings else None
         _emit(
             self.caller,
-            "room_reviews",
+            "room_review_board",
             room={"id": room.id, "key": room.key, "description": room.db.desc or ""},
-            review_count=len(reviews),
+            exists=True,
+            challenge_id=room.db.current_challenge_id,
+            review_count=len(evaluations),
             average_rating=round(average, 2) if average is not None else None,
-            evaluations=reviews,
+            evaluations=evaluations,
             consequence_free=True,
         )
 
