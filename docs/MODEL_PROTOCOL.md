@@ -68,8 +68,7 @@ Broadcasts communication to the current room. No authority is required.
 
 ### `model/move <direction>`
 
-Traverses a directional exit. Movement is denied while the actor holds room admin.
-
+Traverses a directional exit. If the actor holds room admin for a room still under construction, moving requires a repeat-confirm and relinquishes that admin; established room admins may leave and the first departure publishes/seals the room.
 ### `teleport <room-or-agent>`
 
 Available to every arena Character, including model and human participants. Aliases are `tp` and `model/teleport`.
