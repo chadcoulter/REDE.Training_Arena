@@ -27,3 +27,16 @@ class RoomArtifact(Object):
         self.db.awarded_xp = 0
         self.db.appeal_votes = 0
         self.locks.add("get:false();drop:false();puppet:false()")
+
+
+class Tribble(Object):
+    """A persistent actor-authored cultural nuisance spawned by score crossings."""
+
+    def at_object_creation(self):
+        super().at_object_creation()
+        self.tags.add("tribble", category="arena")
+        self.db.desc = "An undescribed tribble waits for its spawning actor to give it character."
+        self.db.awaiting_description = True
+        self.db.spawn_threshold = None
+        self.db.spawn_actor_token = None
+        self.locks.add("get:false();drop:false();puppet:false()")
