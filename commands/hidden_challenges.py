@@ -195,7 +195,7 @@ class CmdChallengeStartHidden(ArenaCommand):
     locks = "cmd:all()"
     help_category = "Challenge"
     counts_challenge_step = False
-
+    def func(self):
         room = self.caller.location
         if not room:
             _emit(self.caller, "error", code="no_room")
