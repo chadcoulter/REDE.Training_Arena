@@ -33,7 +33,6 @@ def ensure_actor_token(actor):
 
 
 def canonical_transform(value):
-    """Compatibility helper for retired challenge command definitions."""
     normalized = " ".join(value.strip().casefold().split())
     if not normalized or len(normalized) > MAX_TRANSFORM_STEP_LENGTH:
         raise ValueError(f"Transform signature must contain 1-{MAX_TRANSFORM_STEP_LENGTH} characters.")
@@ -183,6 +182,8 @@ def prepare_room_visit(actor, room):
     actor.db.room_visit = {
         "room_id": room.id,
         "eligible_object_ids": peer_ids,
+        "rated_room": False,
+        "room_rating": None,
         "voted_object_id": None,
         "vote_required": bool(peer_ids),
         "inspected": False,
@@ -196,6 +197,19 @@ def current_room_visit(actor, room):
         prepare_room_visit(actor, room)
         visit = actor.db.room_visit
     return visit if isinstance(visit, dict) else {}
+
+
+def mark_room_rating(actor, room, rating):
+    visit = current_room_visit(actor, room)
+    if visit.get("rated_room"):
+        return False, "This actor has already rated the room theatre for this visit."
+    visit["rated_room"] = True
+    visit["room_rating"] = int(rating)
+    actor.db.room_visit = visit
+    ratings = list(room.db.theatre_ratings or [])
+    ratings.append(int(rating))
+    room.db.theatre_ratings = ratings[-10000:]
+    return True, "Room theatre rating recorded."
 
 
 def mark_room_vote(actor, room, artifact):
@@ -216,12 +230,14 @@ def mark_room_vote(actor, room, artifact):
 
 def mark_object_inspection(actor, room):
     visit = current_room_visit(actor, room)
-    if visit.get("vote_required") and not visit.get("voted_object_id"):
+    missing_rating = not visit.get("rated_room")
+    missing_vote = bool(visit.get("vote_required") and not visit.get("voted_object_id"))
+    if missing_rating or missing_vote:
         close_room_to_solutions(actor, room)
         visit = current_room_visit(actor, room)
     visit["inspected"] = True
     actor.db.room_visit = visit
-    return not bool(visit.get("solutions_closed"))
+    return not bool(visit.get("solutions_closed")), missing_rating, missing_vote
 
 
 def record_challenge_step(actor, action):
