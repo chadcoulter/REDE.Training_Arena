@@ -10,6 +10,9 @@ class Character(DefaultCharacter):
         super().at_object_creation()
         self.db.arena_actor_token = uuid4().hex
         self.db.xp = 0
+        self.db.arena_ticks = 0
+        self.db.hidden_social_score = 1
+        self.db.next_score_guess_tick = 20
         self.db.active_challenge = None
         self.db.pending_challenge_review = None
         self.db.solution_closed_rooms = []
@@ -24,6 +27,13 @@ class Character(DefaultCharacter):
             from commands.challenge_runtime import prepare_room_visit
 
             prepare_room_visit(self, lobby)
+
+    def get_display_name(self, looker=None, **kwargs):
+        """Peers can see this actor's score; the actor itself never can."""
+        base = super().get_display_name(looker, **kwargs)
+        if looker is not None and looker != self:
+            return f"{base} [score {int(self.db.hidden_social_score or 1)}]"
+        return base
 
     def _admin_room(self):
         room_id = self.db.admin_room_id
