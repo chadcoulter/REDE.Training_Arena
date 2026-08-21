@@ -69,7 +69,6 @@ class Character(DefaultCharacter):
         if source_location and getattr(source_location.db, "admin_holder_id", None) == self.id:
             if getattr(source_location, "is_established", False):
                 source_location.db.published_sealed = True
-                source_location.establish_admin(self)
                 self.msg(
                     f"{source_location.key} is now published. Its theatre description and challenge are immutable."
                 )

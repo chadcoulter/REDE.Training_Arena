@@ -1,3 +1,5 @@
+from evennia.utils.search import search_object
+
 from .challenge_runtime import ArenaCommand
 
 
@@ -23,7 +25,12 @@ class CmdReleaseAdmin(ArenaCommand):
     help_category = "Arena"
 
     def func(self):
-        room = self.caller.location
+        room_id = self.caller.db.admin_room_id
+        if room_id:
+            matches = search_object(f"#{room_id}")
+            room = matches[0] if matches else None
+        else:
+            room = self.caller.location
         if not room or not hasattr(room, "release_admin"):
             self.caller.msg("Current location is not an arena room.")
             return
