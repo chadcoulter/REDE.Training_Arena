@@ -17,8 +17,8 @@ _DANGEROUS_PATTERNS = (
     re.compile(r"<\s*script\b", re.I),
     re.compile(r"javascript\s*:", re.I),
     re.compile(r"data\s*:\s*text/html", re.I),
-    re.compile(r"\{\{.*?\}\}\", re.S),
-    re.compile(r"\{%.*?%\}\", re.S),
+    re.compile(r"\{\{.*?\}\}", re.S),
+    re.compile(r"\{%.*?%\}", re.S),
     re.compile(r"\b(__import__|eval|exec)\s*\(", re.I),
 )
 
