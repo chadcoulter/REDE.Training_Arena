@@ -1,9 +1,10 @@
 import json
 
-from .challenge_runtime import ArenaCommand
+from .challenge_runtime import ArenaCommand, ensure_actor_token
 
 CANVAS_WIDTH = 64
 CANVAS_HEIGHT = 16
+GRAFFITI_SOLUTION_MULTIPLIER = 1.10
 ORIENTATIONS = {
     "horizontal": (1, 0),
     "vertical": (0, 1),
@@ -24,24 +25,38 @@ def _emit(caller, event, **payload):
     caller.msg(json.dumps({"event": event, **payload}, ensure_ascii=False))
 
 
-def _core_graffiti_room(room):
-    return bool(room and room.tags.has("core_room", category="rede"))
-
-
 def _cells_for(text, orientation, x, y):
     dx, dy = ORIENTATIONS[orientation]
     return [(x + (i * dx), y + (i * dy), ch) for i, ch in enumerate(text)]
 
 
+def graffiti_contributed(actor, room):
+    """Return True when this ephemeral actor has contributed to this room wall."""
+    if not actor or not room:
+        return False
+    token = ensure_actor_token(actor)
+    contributors = list(room.db.graffiti_contributors or [])
+    return token in contributors
+
+
+def graffiti_solution_multiplier(actor, room):
+    """One bounded engagement bonus per actor per room; repeat painting does not stack."""
+    return GRAFFITI_SOLUTION_MULTIPLIER if graffiti_contributed(actor, room) else 1.0
+
+
 class CmdGraffitiPaint(ArenaCommand):
-    """Paint the actor's arena name onto one of the four core-room graffiti walls.
+    """Paint the actor's arena name onto the current room's graffiti wall.
 
     Usage:
         graffiti/paint <horizontal|vertical|diag-down|diag-up> <x> <y>
 
-    A new mark may overwrite differently oriented marks but may not overlap a
-    mark with the same orientation. Painting is atomic: any invalid overlap or
-    out-of-bounds cell rejects the whole mark.
+    Every arena room has a graffiti wall. A new mark may overwrite differently
+    oriented marks but may not overlap a mark with the same orientation.
+    Painting is atomic: any invalid overlap or out-of-bounds cell rejects the
+    whole mark.
+
+    The actor's first valid contribution in a room qualifies that actor for the
+    room's graffiti solution multiplier. Additional marks do not stack it.
     """
 
     key = "graffiti/paint"
@@ -52,8 +67,8 @@ class CmdGraffitiPaint(ArenaCommand):
 
     def func(self):
         room = self.caller.location
-        if not _core_graffiti_room(room):
-            _emit(self.caller, "error", code="graffiti_room", message="Graffiti is available only in the four core rooms.")
+        if not room or not room.is_typeclass("typeclasses.rooms.Room", exact=False):
+            _emit(self.caller, "error", code="graffiti_room", message="You must be in an arena room to paint graffiti.")
             return
 
         parts = self.args.split()
@@ -101,6 +116,14 @@ class CmdGraffitiPaint(ArenaCommand):
                 "actor": self.caller.key,
             }
         room.db.graffiti_cells = existing
+
+        token = ensure_actor_token(self.caller)
+        contributors = list(room.db.graffiti_contributors or [])
+        first_contribution = token not in contributors
+        if first_contribution:
+            contributors.append(token)
+            room.db.graffiti_contributors = contributors
+
         _emit(
             self.caller,
             "graffiti_painted",
@@ -109,4 +132,6 @@ class CmdGraffitiPaint(ArenaCommand):
             orientation=orientation,
             x=x,
             y=y,
+            first_room_contribution=first_contribution,
+            solution_multiplier=graffiti_solution_multiplier(self.caller, room),
         )
