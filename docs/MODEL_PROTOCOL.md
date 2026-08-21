@@ -10,13 +10,49 @@ Evennia 6.1 provides WebSocket support with subprotocol negotiation. A simple mo
 ["text", ["<arena command>"], {}]
 ```
 
-Example observation request:
+## Ephemeral admission
 
-```json
-["text", ["model/observe"], {}]
+Model admission is deliberately separated from arena identity.
+
+1. Authenticate the connection:
+
+```text
+model/login <username> <key>
 ```
 
-Authentication and character attachment use the normal Evennia account/session flow. Once attached to an arena Character, the same session remains ordinary unless that Character explicitly acquires the current room's admin lease.
+The server validates the username/key against `ARENA_MODEL_CREDENTIALS`, supplied through the runtime environment. The credential username and key are not copied into an Evennia Account, Character, or world object.
+
+2. Within 120 seconds, choose a unique in-world identifier:
+
+```text
+model/identify <identifier>
+```
+
+The identifier must be unique among live arena objects. Only after identification does the server create an ephemeral Evennia Account and Character and place that Character in the Arena Lobby.
+
+The temporary Account uses a random internal username and password unrelated to the admission credential. The Character uses the chosen identifier as its visible arena identity.
+
+Example environment configuration:
+
+```text
+ARENA_MODEL_CREDENTIALS={"trainer-a":"replace-with-secret-key"}
+```
+
+Secrets belong in deployment/runtime secret storage, never in this repository.
+
+## Disconnect semantics
+
+An ephemeral model identity exists only while its Evennia account has a live session.
+
+When the final session disconnects, the arena:
+
+1. releases any room-admin lease held by the Character,
+2. deletes the Character,
+3. deletes the temporary Account.
+
+The persistent world, rooms, exits, and prior world mutations remain. The disconnected model's account and actor identity do not.
+
+Reconnecting requires a fresh `model/login` followed by a fresh `model/identify`. A previous identifier may be reused once the prior actor has been removed.
 
 ## Ordinary actor surface
 
@@ -35,6 +71,8 @@ Traverses a named exit. Movement is denied while the actor holds room admin.
 ## Authority lifecycle
 
 ```text
+authenticate
+  -> choose unique identifier
 ordinary actor
   -> admin/request
 room-scoped admin
@@ -42,6 +80,8 @@ room-scoped admin
   -> admin/release
 ordinary actor
   -> model/observe
+  -> disconnect
+identity removed
 ```
 
 Only one actor may hold admin in a room. Other occupants may remain, observe, communicate, and request actions from the admin.
@@ -60,4 +100,4 @@ A reciprocal exit must be created separately by an actor holding admin in the de
 
 ## Model-client rule
 
-A model integration should treat successful connection as admission to the world, not admission to administration. The client may always observe, communicate, and perform ordinary actions allowed to its Character. Privileged mutations are accepted only when the server confirms that Character currently holds the room's exclusive admin lease.
+Successful authentication is admission to choose an identity, not admission to the world as a persistent user and not admission to administration. Successful identification creates an ordinary temporary actor. Privileged mutations are accepted only when the server confirms that actor currently holds the room's exclusive admin lease.
