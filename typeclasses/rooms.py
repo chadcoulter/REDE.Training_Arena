@@ -22,12 +22,11 @@ class Room(DefaultRoom):
 
     @property
     def has_graffiti_wall(self):
-        return self.tags.has("core_room", category="rede")
+        """Every arena room exposes one persistent graffiti wall."""
+        return True
 
     def render_graffiti(self):
-        """Render the sparse core-room graffiti wall into fixed-width text."""
-        if not self.has_graffiti_wall:
-            return ""
+        """Render the sparse room graffiti wall into fixed-width text."""
         from commands.graffiti import CANVAS_HEIGHT, CANVAS_WIDTH
 
         cells = dict(self.db.graffiti_cells or {})
@@ -45,7 +44,7 @@ class Room(DefaultRoom):
         return "\n".join(rows)
 
     def visible_description(self):
-        """Protected base description plus mutable graffiti overlay."""
+        """Room theatre/base description plus mutable graffiti overlay."""
         base = self.db.desc or ""
         graffiti = self.render_graffiti()
         if not graffiti:
@@ -53,10 +52,8 @@ class Room(DefaultRoom):
         return f"{base}\n\n[Graffiti Wall]\n{graffiti}"
 
     def get_display_desc(self, looker, **kwargs):
-        """Show graffiti as part of the visible description without mutating base text."""
-        if self.has_graffiti_wall:
-            return self.visible_description()
-        return super().get_display_desc(looker, **kwargs)
+        """Show graffiti as part of every arena room's visible description."""
+        return self.visible_description()
 
     def request_admin(self, actor):
         holder_id = self.db.admin_holder_id
