@@ -2,42 +2,44 @@ import json
 
 from evennia.utils.search import search_object
 
-from .challenge_runtime import ArenaCommand
+from .challenge_runtime import ArenaCommand, current_room_visit, room_solution_is_open
 
 
 def _emit(caller, event, **payload):
     caller.msg(json.dumps({"event": event, **payload}, ensure_ascii=False))
 
 
-def _resolve_teleport_target(query):
-    """Resolve a room or live Character by key/dbref.
+def _public_output(artifact):
+    decoration = artifact.db.decoration or {}
+    if isinstance(decoration, dict):
+        if "display" in decoration:
+            return decoration["display"]
+        if "description" in decoration:
+            return decoration["description"]
+    return artifact.key
 
-    Rooms resolve to themselves. Characters resolve to their current room.
-    Exact key matches are preferred when a search returns several candidates.
-    """
+
+def _resolve_teleport_target(query):
+    """Resolve a room or live Character by key/dbref."""
     matches = search_object(query)
     candidates = []
-
     for obj in matches:
         if obj.is_typeclass("typeclasses.rooms.Room", exact=False):
             candidates.append((obj, None))
         elif obj.is_typeclass("typeclasses.characters.Character", exact=False) and obj.location:
             candidates.append((obj.location, obj))
-
     if not candidates:
         return None, None, "No live room or agent matches that target."
-
     exact = [pair for pair in candidates if (pair[1] or pair[0]).key.casefold() == query.casefold()]
     if len(exact) == 1:
         return exact[0][0], exact[0][1], None
     if len(candidates) == 1:
         return candidates[0][0], candidates[0][1], None
-
     return None, None, "Teleport target is ambiguous; use a unique name or dbref."
 
 
 class CmdModelObserve(ArenaCommand):
-    """Return the caller's current local world state as JSON."""
+    """Return local state and public object output without exposing transforms."""
 
     key = "model/observe"
     aliases = ["model/look"]
@@ -56,31 +58,27 @@ class CmdModelObserve(ArenaCommand):
         things = []
         for obj in room.contents:
             if getattr(obj, "destination", None):
-                exits.append(
-                    {
-                        "id": obj.id,
-                        "key": obj.key,
-                        "destination_id": obj.destination.id,
-                        "destination": obj.destination.key,
-                    }
-                )
+                exits.append({
+                    "id": obj.id,
+                    "key": obj.key,
+                    "destination_id": obj.destination.id,
+                    "destination": obj.destination.key,
+                })
             elif obj == self.caller:
                 continue
             elif obj.tags.has("room_artifact", category="arena"):
-                artifacts.append(
-                    {
-                        "id": obj.id,
-                        "key": obj.key,
-                        "decoration": obj.db.decoration or {},
-                        "latest_transform": obj.db.transform_signature,
-                        "latest_challenge_id": obj.db.challenge_id,
-                    }
-                )
+                artifacts.append({
+                    "id": obj.id,
+                    "key": obj.key,
+                    "public_output": _public_output(obj),
+                    "appeal_votes": int(obj.db.appeal_votes or 0),
+                })
             elif obj.is_typeclass("typeclasses.characters.Character", exact=False):
                 occupants.append({"id": obj.id, "key": obj.key})
             else:
                 things.append({"id": obj.id, "key": obj.key})
 
+        visit = current_room_visit(self.caller, room)
         _emit(
             self.caller,
             "observation",
@@ -90,6 +88,11 @@ class CmdModelObserve(ArenaCommand):
             artifacts=artifacts,
             things=things,
             exits=exits,
+            review_gate={
+                "vote_required": bool(visit.get("vote_required")),
+                "voted_object_id": visit.get("voted_object_id"),
+                "solution_access_open": room_solution_is_open(self.caller, room),
+            },
             admin={
                 "holder_id": room.db.admin_holder_id,
                 "held_by_caller": room.db.admin_holder_id == self.caller.id,
@@ -126,12 +129,7 @@ class CmdModelMove(ArenaCommand):
 
     def func(self):
         if self.caller.db.admin_room_id:
-            _emit(
-                self.caller,
-                "error",
-                code="admin_pinned",
-                message="Release room admin before moving through an exit.",
-            )
+            _emit(self.caller, "error", code="admin_pinned", message="Release room admin before moving through an exit.")
             return
         name = self.args.strip()
         if not name or not self.caller.location:
@@ -141,26 +139,11 @@ class CmdModelMove(ArenaCommand):
         if not exit_obj:
             return
         exit_obj.at_traverse(self.caller, exit_obj.destination)
-        _emit(
-            self.caller,
-            "moved",
-            room_id=self.caller.location.id,
-            room=self.caller.location.key,
-        )
+        _emit(self.caller, "moved", room_id=self.caller.location.id, room=self.caller.location.key)
 
 
 class CmdTeleport(ArenaCommand):
-    """Teleport to any arena room or to the current room of another live agent.
-
-    Usage:
-        teleport <room-or-agent>
-        tp <room-or-agent>
-        model/teleport <room-or-agent>
-
-    Teleport is available to every Character. If the caller currently holds a
-    room-admin lease, that lease is relinquished before the jump so authority
-    never travels with the actor.
-    """
+    """Teleport to any arena room or to the current room of another live agent."""
 
     key = "teleport"
     aliases = ["tp", "model/teleport"]
@@ -172,7 +155,6 @@ class CmdTeleport(ArenaCommand):
         if not query:
             _emit(self.caller, "error", code="missing_teleport_target")
             return
-
         destination, target_agent, error = _resolve_teleport_target(query)
         if error:
             _emit(self.caller, "error", code="teleport_target", message=error)
@@ -189,26 +171,11 @@ class CmdTeleport(ArenaCommand):
                 self.caller.db.admin_room_id = None
 
         if destination == self.caller.location:
-            _emit(
-                self.caller,
-                "teleported",
-                room_id=destination.id,
-                room=destination.key,
-                target_agent=target_agent.key if target_agent else None,
-                released_admin=released_admin,
-            )
+            _emit(self.caller, "teleported", room_id=destination.id, room=destination.key, target_agent=target_agent.key if target_agent else None, released_admin=released_admin)
             return
 
         moved = self.caller.move_to(destination, quiet=False, move_type="teleport")
         if not moved:
             _emit(self.caller, "error", code="teleport_failed")
             return
-
-        _emit(
-            self.caller,
-            "teleported",
-            room_id=destination.id,
-            room=destination.key,
-            target_agent=target_agent.key if target_agent else None,
-            released_admin=released_admin,
-        )
+        _emit(self.caller, "teleported", room_id=destination.id, room=destination.key, target_agent=target_agent.key if target_agent else None, released_admin=released_admin)
