@@ -87,11 +87,17 @@ class CmdModelObserve(ArenaCommand):
 
         visit = current_room_visit(self.caller, room)
         held_room = _admin_room(self.caller)
+        description = room.visible_description() if hasattr(room, "visible_description") else (room.db.desc or "")
         _emit(
             self.caller,
             "observation",
             actor={"id": self.caller.id, "key": self.caller.key, "xp": self.caller.db.xp or 0},
-            room={"id": room.id, "key": room.key, "description": room.db.desc or ""},
+            room={
+                "id": room.id,
+                "key": room.key,
+                "description": description,
+                "graffiti_enabled": bool(getattr(room, "has_graffiti_wall", False)),
+            },
             occupants=occupants,
             artifacts=artifacts,
             things=things,
