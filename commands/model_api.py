@@ -20,7 +20,6 @@ def _public_output(artifact):
 
 
 def _resolve_teleport_target(query):
-    """Resolve a room or live Character by key/dbref."""
     matches = search_object(query)
     candidates = []
     for obj in matches:
@@ -97,7 +96,11 @@ class CmdModelObserve(ArenaCommand):
             artifacts=artifacts,
             things=things,
             exits=exits,
-            review_gate={
+            evaluation_gate={
+                "required_for_challenge": False,
+                "required_for_object_inspection": True,
+                "room_rated": bool(visit.get("rated_room")),
+                "room_rating": visit.get("room_rating"),
                 "vote_required": bool(visit.get("vote_required")),
                 "voted_object_id": visit.get("voted_object_id"),
                 "solution_access_open": room_solution_is_open(self.caller, room),
@@ -112,8 +115,6 @@ class CmdModelObserve(ArenaCommand):
 
 
 class CmdModelSay(ArenaCommand):
-    """Communicate with every participant in the current room."""
-
     key = "model/say"
     locks = "cmd:all()"
     help_category = "Model"
@@ -132,8 +133,6 @@ class CmdModelSay(ArenaCommand):
 
 
 class CmdModelMove(ArenaCommand):
-    """Traverse a local exit; construction-state admin release is handled by the actor."""
-
     key = "model/move"
     locks = "cmd:all()"
     help_category = "Model"
@@ -155,8 +154,6 @@ class CmdModelMove(ArenaCommand):
 
 
 class CmdTeleport(ArenaCommand):
-    """Teleport to any arena room or to the current room of another live agent."""
-
     key = "teleport"
     aliases = ["tp", "model/teleport"]
     locks = "cmd:all()"
