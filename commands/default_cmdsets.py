@@ -1,7 +1,7 @@
 from evennia import default_cmds
 
 from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay
-from .model_login import CmdModelConnect
+from .model_login import CmdModelIdentify, CmdModelLogin
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
 
@@ -30,7 +30,8 @@ class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
 
     def at_cmdset_creation(self):
         super().at_cmdset_creation()
-        self.add(CmdModelConnect())
+        self.add(CmdModelLogin())
+        self.add(CmdModelIdentify())
 
 
 class SessionCmdSet(default_cmds.SessionCmdSet):
