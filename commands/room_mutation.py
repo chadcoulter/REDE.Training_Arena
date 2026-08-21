@@ -36,7 +36,6 @@ DIRECTION_ALIASES = {
 
 
 def normalize_direction(value):
-    """Normalize accepted direction spelling into one of the 26 spatial slots."""
     direction = value.strip().lower().replace("_", "-").replace(" ", "-")
     direction = DIRECTION_ALIASES.get(direction, direction)
     for prefix in ("up-", "down-"):
@@ -57,7 +56,7 @@ def _require_admin(caller):
 
 
 class CmdAdminDescribe(ArenaCommand):
-    """Replace the description of a non-core room currently administered."""
+    """Set the theatre description of a non-core room before publication."""
 
     key = "admin/describe"
     locks = "cmd:all()"
@@ -67,6 +66,9 @@ class CmdAdminDescribe(ArenaCommand):
         room = _require_admin(self.caller)
         if not room:
             return
+        if room.db.published_sealed:
+            self.caller.msg("This room has been published; its theatre description is immutable.")
+            return
         if room.tags.has("exit_creation_only", category="rede"):
             self.caller.msg("Core arena rooms are protected anchors; only exit creation is allowed here.")
             return
@@ -75,7 +77,7 @@ class CmdAdminDescribe(ArenaCommand):
             self.caller.msg("Usage: admin/describe <description>")
             return
         room.db.desc = text
-        self.caller.msg("Room description updated.")
+        self.caller.msg("Room theatre updated.")
 
 
 class CmdAdminOpen(ArenaCommand):
