@@ -1,8 +1,10 @@
 from evennia import create_object
+from evennia.utils.search import search_object
 
 from .challenge_runtime import ArenaCommand
 
 EXIT = "typeclasses.exits.Exit"
+ROOM = "typeclasses.rooms.Room"
 
 HORIZONTAL_DIRECTIONS = (
     "north",
@@ -55,6 +57,18 @@ def _require_admin(caller):
     return room
 
 
+def _find_arena_room(name):
+    matches = search_object(name)
+    exact = []
+    for obj in matches:
+        try:
+            if obj.is_typeclass(ROOM, exact=False) and obj.key.casefold() == name.casefold():
+                exact.append(obj)
+        except Exception:
+            continue
+    return exact[0] if len(exact) == 1 else None
+
+
 class CmdAdminDescribe(ArenaCommand):
     """Set the theatre description of a non-core room before publication."""
 
@@ -81,7 +95,7 @@ class CmdAdminDescribe(ArenaCommand):
 
 
 class CmdAdminOpen(ArenaCommand):
-    """Open one directional exit from the administered room to another arena room."""
+    """Open one directional exit, creating the destination room when needed."""
 
     key = "admin/open"
     locks = "cmd:all()"
@@ -107,13 +121,6 @@ class CmdAdminOpen(ArenaCommand):
             self.caller.msg("A destination room is required.")
             return
 
-        destination = self.caller.search(destination_name, global_search=True)
-        if not destination:
-            return
-        if not hasattr(destination, "request_admin"):
-            self.caller.msg("Destination must be an arena Room.")
-            return
-
         occupied_directions = {
             normalize_direction(obj.key) for obj in room.exits if normalize_direction(obj.key)
         }
@@ -121,8 +128,22 @@ class CmdAdminOpen(ArenaCommand):
             self.caller.msg(f"The {direction} exit slot is already occupied in this room.")
             return
 
+        destination = _find_arena_room(destination_name)
+        created_room = False
+        if destination is None:
+            destination = create_object(ROOM, key=destination_name)
+            destination.tags.add("arena_room", category="rede")
+            destination.db.desc = ""
+            destination.db.published_sealed = False
+            destination.db.current_challenge_id = None
+            created_room = True
+
         created = create_object(EXIT, key=direction, location=room, destination=destination)
         self.caller.msg(
             f"Opened one-way {created.key} exit from {room.key} to {destination.key}. "
-            "Creating a return exit requires admin authority in the destination room."
+            + (
+                "The new room is unchallenged and will be claimed by its first entrant."
+                if created_room
+                else "Creating a return exit requires admin authority in the destination room."
+            )
         )
