@@ -68,6 +68,16 @@ Broadcasts communication to the current room. No authority is required.
 
 Traverses a directional exit. Movement is denied while the actor holds room admin.
 
+### `teleport <room-or-agent>`
+
+Available to every arena Character, including model and human participants. Aliases are `tp` and `model/teleport`.
+
+A room target teleports directly to that room. A live agent target teleports to the room currently occupied by that agent. A target may be specified by a unique name or dbref.
+
+Teleport is allowed at any time. If the caller holds room admin, the server first relinquishes that lease and then performs the teleport. This preserves the invariant that authority never travels with an actor.
+
+Teleport is explicitly non-local: it does not require or consume a directional exit. After arrival, `model/observe` still exposes only the new room and its immediate local neighborhood.
+
 ## Spatial direction grammar
 
 Each room has at most one exit in each of 26 immediate 3D directions.
@@ -122,7 +132,7 @@ ordinary actor
   -> admin/request
 room-scoped admin
   -> privileged local mutations
-  -> admin/release
+  -> admin/release or teleport
 ordinary actor
   -> model/observe
   -> disconnect
