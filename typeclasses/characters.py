@@ -36,11 +36,8 @@ class Character(DefaultCharacter):
         admin_room = self._admin_room()
         if admin_room and admin_room.db.admin_holder_id == self.id:
             if admin_room.is_established:
-                # Established-room administration is allowed to persist remotely.
                 return super().at_pre_move(destination, **kwargs)
 
-            # During construction, directional movement requires an explicit
-            # second attempt to confirm abandonment and lease release.
             pending = self.db.pending_admin_exit
             if not isinstance(pending, dict) or pending.get("destination_id") != destination.id:
                 self.db.pending_admin_exit = {"destination_id": destination.id}
@@ -58,6 +55,15 @@ class Character(DefaultCharacter):
     def at_post_move(self, source_location, **kwargs):
         super().at_post_move(source_location, **kwargs)
         self.db.pending_admin_exit = None
+
+        if source_location and getattr(source_location.db, "admin_holder_id", None) == self.id:
+            if getattr(source_location, "is_established", False):
+                source_location.db.published_sealed = True
+                source_location.establish_admin(self)
+                self.msg(
+                    f"{source_location.key} is now published. Its theatre description and challenge are immutable."
+                )
+
         from commands.challenge_runtime import prepare_room_visit
 
         prepare_room_visit(self, self.location)
