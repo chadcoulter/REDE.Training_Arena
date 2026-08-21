@@ -29,6 +29,9 @@ class CmdReleaseAdmin(ArenaCommand):
         if room_id:
             matches = search_object(f"#{room_id}")
             room = matches[0] if matches else None
+            if not room:
+                self.caller.msg("Your administered room could not be found.")
+                return
         else:
             room = self.caller.location
         if not room or not hasattr(room, "release_admin"):
