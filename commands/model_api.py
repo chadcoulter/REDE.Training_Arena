@@ -46,7 +46,7 @@ def _admin_room(actor):
 
 
 class CmdModelObserve(ArenaCommand):
-    """Return local state and public object output without exposing transforms."""
+    """Return local state; peer scores are visible while self score is omitted."""
 
     key = "model/observe"
     aliases = ["model/look"]
@@ -81,7 +81,11 @@ class CmdModelObserve(ArenaCommand):
                     "appeal_votes": int(obj.db.appeal_votes or 0),
                 })
             elif obj.is_typeclass("typeclasses.characters.Character", exact=False):
-                occupants.append({"id": obj.id, "key": obj.key})
+                occupants.append({
+                    "id": obj.id,
+                    "key": obj.key,
+                    "score": int(obj.db.hidden_social_score or 100),
+                })
             else:
                 things.append({"id": obj.id, "key": obj.key})
 
