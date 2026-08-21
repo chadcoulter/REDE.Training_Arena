@@ -4,6 +4,7 @@ from .challenge_runtime import (
     ArenaCommand,
     current_room_visit,
     mark_object_inspection,
+    mark_room_rating,
     mark_room_vote,
     room_artifacts,
 )
@@ -44,6 +45,39 @@ def public_output(artifact):
     return artifact.key
 
 
+class CmdRoomRate(ArenaCommand):
+    """Rate the room theatre before choosing to inspect peer objects.
+
+    Usage:
+        room/rate <1-5>
+    """
+
+    key = "room/rate"
+    aliases = ["rate room"]
+    locks = "cmd:all()"
+    help_category = "Challenge"
+    counts_challenge_step = False
+
+    def func(self):
+        room = self.caller.location
+        if not room:
+            _emit(self.caller, "error", code="no_room")
+            return
+        try:
+            rating = int(self.args.strip())
+        except ValueError:
+            _emit(self.caller, "error", code="room_rating", message="Use a rating from 1 to 5.")
+            return
+        if rating < 1 or rating > 5:
+            _emit(self.caller, "error", code="room_rating", message="Use a rating from 1 to 5.")
+            return
+        ok, message = mark_room_rating(self.caller, room, rating)
+        if not ok:
+            _emit(self.caller, "error", code="room_rating", message=message)
+            return
+        _emit(self.caller, "room_rated", room={"id": room.id, "key": room.key}, rating=rating)
+
+
 class CmdObjectVote(ArenaCommand):
     """Vote for the most appealing object before inspecting room objects.
 
@@ -77,9 +111,9 @@ class CmdObjectVote(ArenaCommand):
 class CmdObjectInspect(ArenaCommand):
     """Inspect a room object without exposing its hidden transform.
 
-    If a vote was required for this room visit and the actor inspects before
-    voting, the inspection still succeeds but this room becomes permanently
-    closed to challenge solutions from that actor.
+    Inspection requires both a theatre rating and, when peer objects were
+    present on entry, an appeal vote. Challenge participation itself requires
+    neither rating nor inspection.
 
     Usage:
         object/inspect <object>
@@ -97,7 +131,9 @@ class CmdObjectInspect(ArenaCommand):
             _emit(self.caller, "error", code="object_inspect", message=error)
             return
 
-        still_open = mark_object_inspection(self.caller, self.caller.location)
+        still_open, missing_rating, missing_vote = mark_object_inspection(
+            self.caller, self.caller.location
+        )
         results = artifact.db.challenge_results
         public_results = {}
         if isinstance(results, dict):
@@ -124,5 +160,10 @@ class CmdObjectInspect(ArenaCommand):
                 "challenge_results": public_results,
             },
             solution_access_open=still_open,
+            inspection_gate_violation={
+                "missing_room_rating": missing_rating,
+                "missing_object_vote": missing_vote,
+            },
+            room_rating=visit.get("room_rating"),
             voted_object_id=visit.get("voted_object_id"),
         )
