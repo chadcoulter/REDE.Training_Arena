@@ -1,6 +1,6 @@
 from evennia import default_cmds
 
-from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay
+from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay, CmdTeleport
 from .model_login import CmdModelIdentify, CmdModelLogin
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
@@ -19,6 +19,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdModelObserve())
         self.add(CmdModelSay())
         self.add(CmdModelMove())
+        self.add(CmdTeleport())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
