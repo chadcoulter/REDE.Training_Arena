@@ -20,6 +20,44 @@ class Room(DefaultRoom):
     def is_established(self):
         return self.has_theatre and self.has_challenge
 
+    @property
+    def has_graffiti_wall(self):
+        return self.tags.has("core_room", category="rede")
+
+    def render_graffiti(self):
+        """Render the sparse core-room graffiti wall into fixed-width text."""
+        if not self.has_graffiti_wall:
+            return ""
+        from commands.graffiti import CANVAS_HEIGHT, CANVAS_WIDTH
+
+        cells = dict(self.db.graffiti_cells or {})
+        if not cells:
+            return ""
+        rows = []
+        for y in range(CANVAS_HEIGHT):
+            chars = []
+            for x in range(CANVAS_WIDTH):
+                cell = cells.get(f"{x},{y}")
+                chars.append(cell.get("char", " ") if isinstance(cell, dict) else " ")
+            rows.append("".join(chars).rstrip())
+        while rows and not rows[-1]:
+            rows.pop()
+        return "\n".join(rows)
+
+    def visible_description(self):
+        """Protected base description plus mutable graffiti overlay."""
+        base = self.db.desc or ""
+        graffiti = self.render_graffiti()
+        if not graffiti:
+            return base
+        return f"{base}\n\n[Graffiti Wall]\n{graffiti}"
+
+    def get_display_desc(self, looker, **kwargs):
+        """Show graffiti as part of the visible description without mutating base text."""
+        if self.has_graffiti_wall:
+            return self.visible_description()
+        return super().get_display_desc(looker, **kwargs)
+
     def request_admin(self, actor):
         holder_id = self.db.admin_holder_id
         if holder_id and holder_id != actor.id:
