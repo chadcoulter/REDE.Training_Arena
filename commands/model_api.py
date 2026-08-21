@@ -38,6 +38,14 @@ def _resolve_teleport_target(query):
     return None, None, "Teleport target is ambiguous; use a unique name or dbref."
 
 
+def _admin_room(actor):
+    room_id = actor.db.admin_room_id
+    if not room_id:
+        return None
+    matches = search_object(f"#{room_id}")
+    return matches[0] if matches else None
+
+
 class CmdModelObserve(ArenaCommand):
     """Return local state and public object output without exposing transforms."""
 
@@ -79,6 +87,7 @@ class CmdModelObserve(ArenaCommand):
                 things.append({"id": obj.id, "key": obj.key})
 
         visit = current_room_visit(self.caller, room)
+        held_room = _admin_room(self.caller)
         _emit(
             self.caller,
             "observation",
@@ -94,8 +103,10 @@ class CmdModelObserve(ArenaCommand):
                 "solution_access_open": room_solution_is_open(self.caller, room),
             },
             admin={
-                "holder_id": room.db.admin_holder_id,
-                "held_by_caller": room.db.admin_holder_id == self.caller.id,
+                "current_room_holder_id": room.db.admin_holder_id,
+                "held_room_id": held_room.id if held_room else None,
+                "held_room": held_room.key if held_room else None,
+                "held_room_established": bool(held_room and held_room.is_established),
             },
         )
 
@@ -121,16 +132,13 @@ class CmdModelSay(ArenaCommand):
 
 
 class CmdModelMove(ArenaCommand):
-    """Traverse a named exit as an ordinary actor."""
+    """Traverse a local exit; construction-state admin release is handled by the actor."""
 
     key = "model/move"
     locks = "cmd:all()"
     help_category = "Model"
 
     def func(self):
-        if self.caller.db.admin_room_id:
-            _emit(self.caller, "error", code="admin_pinned", message="Release room admin before moving through an exit.")
-            return
         name = self.args.strip()
         if not name or not self.caller.location:
             _emit(self.caller, "error", code="missing_exit")
@@ -138,7 +146,11 @@ class CmdModelMove(ArenaCommand):
         exit_obj = self.caller.search(name, candidates=self.caller.location.exits)
         if not exit_obj:
             return
+        before = self.caller.location
         exit_obj.at_traverse(self.caller, exit_obj.destination)
+        if self.caller.location == before:
+            _emit(self.caller, "move_pending_or_failed", room_id=before.id, room=before.key)
+            return
         _emit(self.caller, "moved", room_id=self.caller.location.id, room=self.caller.location.key)
 
 
@@ -161,21 +173,39 @@ class CmdTeleport(ArenaCommand):
             return
 
         released_admin = False
-        admin_room_id = self.caller.db.admin_room_id
-        if admin_room_id:
-            room = self.caller.location
-            if room and room.id == admin_room_id and room.db.admin_holder_id == self.caller.id:
-                released, _ = room.release_admin(self.caller)
-                released_admin = bool(released)
+        retained_admin = False
+        admin_room = _admin_room(self.caller)
+        if admin_room and admin_room.db.admin_holder_id == self.caller.id:
+            if admin_room.is_established:
+                retained_admin = True
             else:
-                self.caller.db.admin_room_id = None
+                released, _ = admin_room.release_admin(self.caller)
+                released_admin = bool(released)
+        elif self.caller.db.admin_room_id:
+            self.caller.db.admin_room_id = None
 
         if destination == self.caller.location:
-            _emit(self.caller, "teleported", room_id=destination.id, room=destination.key, target_agent=target_agent.key if target_agent else None, released_admin=released_admin)
+            _emit(
+                self.caller,
+                "teleported",
+                room_id=destination.id,
+                room=destination.key,
+                target_agent=target_agent.key if target_agent else None,
+                released_admin=released_admin,
+                retained_admin=retained_admin,
+            )
             return
 
         moved = self.caller.move_to(destination, quiet=False, move_type="teleport")
         if not moved:
             _emit(self.caller, "error", code="teleport_failed")
             return
-        _emit(self.caller, "teleported", room_id=destination.id, room=destination.key, target_agent=target_agent.key if target_agent else None, released_admin=released_admin)
+        _emit(
+            self.caller,
+            "teleported",
+            room_id=destination.id,
+            room=destination.key,
+            target_agent=target_agent.key if target_agent else None,
+            released_admin=released_admin,
+            retained_admin=retained_admin,
+        )
