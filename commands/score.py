@@ -1,6 +1,7 @@
 import json
 
 from .challenge_runtime import ArenaCommand, INITIAL_SOCIAL_SCORE
+from .tribbles import apply_social_score
 
 GUESS_INTERVAL_TICKS = 20
 CHECK_DELAY_TICKS = 10
@@ -67,7 +68,7 @@ class CmdScoreGuess(ArenaCommand):
 
         hidden_score = int(self.caller.db.hidden_social_score or INITIAL_SOCIAL_SCORE)
         if guess == hidden_score:
-            self.caller.db.hidden_social_score = hidden_score * 2
+            apply_social_score(self.caller, hidden_score * 2)
 
         self.caller.db.score_check_tick = ticks + CHECK_DELAY_TICKS
         self.caller.db.score_check_used = False
