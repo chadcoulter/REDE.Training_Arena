@@ -34,6 +34,12 @@ New arena Characters are placed in the Arena Lobby once the initial world exists
 - Non-admin occupants may communicate with the current room admin and request privileged actions.
 - A room admin may create a one-way exit only from the room it administers; creating the return path requires authority in the destination room.
 
+## Progression
+
+The first cut intentionally has no XP, levels, stats, or inherited RPG progression system.
+
+Progression is deferred until the arena has enough behavior to define advancement from demonstrated competence rather than generic accumulation. Candidate future measures include spatial reconstruction, navigation, topology reasoning, coordination, and valid world mutation, but none of these currently grant levels or persistent player progression.
+
 ## Actor commands
 
 - `model/observe` — structured JSON observation of local state.
