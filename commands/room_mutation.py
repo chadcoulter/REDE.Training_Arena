@@ -136,13 +136,14 @@ class CmdAdminOpen(ArenaCommand):
             destination.db.desc = ""
             destination.db.published_sealed = False
             destination.db.current_challenge_id = None
+            destination.db.reserved_admin_actor_id = self.caller.id
             created_room = True
 
         created = create_object(EXIT, key=direction, location=room, destination=destination)
         self.caller.msg(
             f"Opened one-way {created.key} exit from {room.key} to {destination.key}. "
             + (
-                "The new room is unchallenged and will be claimed by its first entrant."
+                "The new room reserves its initial admin claim for you when you enter."
                 if created_room
                 else "Creating a return exit requires admin authority in the destination room."
             )
