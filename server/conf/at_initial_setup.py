@@ -26,6 +26,8 @@ def at_initial_setup():
         "Arena Lobby",
         "Neutral arrival space. Participants enter as ordinary actors and may observe, communicate, and choose where to work.",
     )
+    lobby.tags.add("arena_lobby", category="rede")
+
     observation = _room(
         "Observation Room",
         "A shared room for watching interactions without requiring privileged authority.",
@@ -45,10 +47,3 @@ def at_initial_setup():
     _link(training, "observation", observation, ["observe"])
     _link(training, "sandbox", sandbox)
     _link(sandbox, "training", training, ["train"])
-
-    # Evennia's initial Limbo remains available to operators; new characters
-    # are explicitly pointed at the Arena Lobby for the normal arena path.
-    from django.conf import settings
-
-    settings.START_LOCATION = lobby.id
-    settings.DEFAULT_HOME = lobby.id
