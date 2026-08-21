@@ -1,5 +1,6 @@
 from evennia import default_cmds
 
+from .arena_help import CmdArenaHelp
 from .artifacts import CmdObjectCreate, CmdObjectDecorate, CmdObjectShow
 from .challenges import (
     CmdChallengeAbandon,
@@ -28,6 +29,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
 
     def at_cmdset_creation(self):
         super().at_cmdset_creation()
+        self.add(CmdArenaHelp())
         self.add(CmdRequestAdmin())
         self.add(CmdReleaseAdmin())
         self.add(CmdAdminStatus())
