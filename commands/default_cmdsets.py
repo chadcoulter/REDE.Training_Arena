@@ -3,17 +3,22 @@ from evennia import default_cmds
 from .artifacts import CmdObjectCreate, CmdObjectDecorate, CmdObjectShow
 from .challenges import (
     CmdChallengeAbandon,
-    CmdChallengeComplete,
     CmdChallengeDefine,
-    CmdChallengeReview,
     CmdChallengeShow,
-    CmdChallengeStart,
     CmdXP,
+)
+from .hidden_challenges import (
+    CmdChallengeCompleteHidden,
+    CmdChallengeReviewHidden,
+    CmdChallengeStartHidden,
+    CmdValidationShow,
+    CmdValidationSubmit,
 )
 from .model_api import CmdModelMove, CmdModelObserve, CmdModelSay, CmdTeleport
 from .model_login import CmdModelIdentify, CmdModelLogin
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
+from .room_review import CmdObjectInspect, CmdObjectVote
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -33,12 +38,16 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdObjectCreate())
         self.add(CmdObjectDecorate())
         self.add(CmdObjectShow())
+        self.add(CmdObjectVote())
+        self.add(CmdObjectInspect())
         self.add(CmdChallengeDefine())
         self.add(CmdChallengeShow())
-        self.add(CmdChallengeStart())
+        self.add(CmdChallengeStartHidden())
         self.add(CmdChallengeAbandon())
-        self.add(CmdChallengeComplete())
-        self.add(CmdChallengeReview())
+        self.add(CmdChallengeCompleteHidden())
+        self.add(CmdChallengeReviewHidden())
+        self.add(CmdValidationShow())
+        self.add(CmdValidationSubmit())
         self.add(CmdXP())
 
 
