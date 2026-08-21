@@ -69,6 +69,7 @@ class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
 
     def at_cmdset_creation(self):
         super().at_cmdset_creation()
+        self.add(CmdArenaHelp())
         self.add(CmdModelLogin())
         self.add(CmdModelIdentify())
 
