@@ -73,8 +73,7 @@ class Room(DefaultRoom):
 
         self.db.admin_holder_id = actor.id
         self.db.reserved_admin_actor_id = None
-        if not self.is_established:
-            actor.db.admin_room_id = self.id
+        actor.db.admin_room_id = self.id
         return True, "Room admin acquired."
 
     def establish_admin(self, actor):
