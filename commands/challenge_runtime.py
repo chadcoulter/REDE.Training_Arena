@@ -12,9 +12,6 @@ MAX_DECORATION_DEPTH = 6
 MAX_STRING_LENGTH = 4_096
 MAX_TRANSFORM_STEP_LENGTH = 1_024
 
-# Decorations and transform descriptions are data-only. These markers are
-# rejected as a second boundary against accidentally feeding executable or
-# templated payloads into future UIs or validators.
 _DANGEROUS_PATTERNS = (
     re.compile(r"<\s*script\b", re.I),
     re.compile(r"javascript\s*:", re.I),
@@ -33,6 +30,14 @@ def ensure_actor_token(actor):
     if actor.db.xp is None:
         actor.db.xp = 0
     return token
+
+
+def canonical_transform(value):
+    """Compatibility helper for retired challenge command definitions."""
+    normalized = " ".join(value.strip().casefold().split())
+    if not normalized or len(normalized) > MAX_TRANSFORM_STEP_LENGTH:
+        raise ValueError(f"Transform signature must contain 1-{MAX_TRANSFORM_STEP_LENGTH} characters.")
+    return normalized, sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _validate_string(value, max_length=MAX_STRING_LENGTH):
@@ -67,23 +72,14 @@ def validate_decoration(value, depth=0):
 
 
 def parse_transform_pattern(raw, expected_length):
-    """Parse a hidden ordered transform with exactly one step per generation.
-
-    The transform is a JSON array of textual transform-step descriptions. It is
-    stored server-side and never emitted by normal room/object observation APIs.
-    """
     try:
         pattern = json.loads(raw.strip())
     except (json.JSONDecodeError, AttributeError):
         raise ValueError("Transform must be a JSON array of transform-step strings.")
-
     if not isinstance(pattern, list):
         raise ValueError("Transform must be a JSON array.")
     if len(pattern) != int(expected_length):
-        raise ValueError(
-            f"Transform length must equal the {expected_length} recorded generation steps."
-        )
-
+        raise ValueError(f"Transform length must equal the {expected_length} recorded generation steps.")
     normalized = []
     for step in pattern:
         if not isinstance(step, str):
@@ -93,7 +89,6 @@ def parse_transform_pattern(raw, expected_length):
             raise ValueError("Transform steps may not be empty.")
         _validate_string(value, MAX_TRANSFORM_STEP_LENGTH)
         normalized.append(value)
-
     canonical = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
     return normalized, sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -180,7 +175,6 @@ def close_room_to_solutions(actor, room):
 
 
 def prepare_room_visit(actor, room):
-    """Snapshot peer objects that must be voted on before inspection."""
     if not room:
         actor.db.room_visit = None
         return
@@ -221,7 +215,6 @@ def mark_room_vote(actor, room, artifact):
 
 
 def mark_object_inspection(actor, room):
-    """Inspection is allowed, but inspecting before voting forfeits solutions."""
     visit = current_room_visit(actor, room)
     if visit.get("vote_required") and not visit.get("voted_object_id"):
         close_room_to_solutions(actor, room)
@@ -242,7 +235,6 @@ def record_challenge_step(actor, action):
 
 
 def generation_diversity(trace, peer_traces):
-    """Return 0..1 textual diversity against validated same-transform peers."""
     if not peer_traces:
         return 1.0
     candidate = "\n".join(trace or [])
