@@ -101,17 +101,21 @@ def merge_decoration(existing, patch):
     return merged
 
 
-def find_live_actor_by_token(token):
-    if not token:
+def find_live_actor(actor_id, token):
+    if not actor_id or not token:
         return None
-    matches = search_object("*")
-    for obj in matches:
-        try:
-            if obj.is_typeclass("typeclasses.characters.Character", exact=False) and obj.db.arena_actor_token == token:
-                return obj
-        except Exception:
-            continue
-    return None
+    matches = search_object(f"#{actor_id}")
+    if not matches:
+        return None
+    actor = matches[0]
+    try:
+        if not actor.is_typeclass("typeclasses.characters.Character", exact=False):
+            return None
+        if actor.db.arena_actor_token != token:
+            return None
+    except Exception:
+        return None
+    return actor
 
 
 def get_actor_artifact(actor, room):
