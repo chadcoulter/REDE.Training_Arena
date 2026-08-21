@@ -11,6 +11,8 @@ MAX_DECORATION_BYTES = 16_384
 MAX_DECORATION_DEPTH = 6
 MAX_STRING_LENGTH = 4_096
 MAX_TRANSFORM_STEP_LENGTH = 1_024
+INITIAL_SOCIAL_SCORE = 100
+SCORE_DECAY = 0.95
 
 _DANGEROUS_PATTERNS = (
     re.compile(r"<\s*script\b", re.I),
@@ -32,7 +34,7 @@ def ensure_actor_token(actor):
     if actor.db.arena_ticks is None:
         actor.db.arena_ticks = 0
     if actor.db.hidden_social_score is None:
-        actor.db.hidden_social_score = 1
+        actor.db.hidden_social_score = INITIAL_SOCIAL_SCORE
     if actor.db.next_score_guess_tick is None:
         actor.db.next_score_guess_tick = 20
     return token
@@ -300,6 +302,12 @@ def generation_diversity(trace, peer_traces):
     return max(0.0, min(1.0, sum(distances) / len(distances)))
 
 
+def decay_social_score(actor):
+    """Every actor tick reduces the self-hidden score by five percent."""
+    current = int(actor.db.hidden_social_score or INITIAL_SOCIAL_SCORE)
+    actor.db.hidden_social_score = max(1, round(current * SCORE_DECAY))
+
+
 class ArenaCommand(Command):
     """Base arena command: one actor action is one actor tick."""
 
@@ -311,6 +319,7 @@ class ArenaCommand(Command):
             ensure_actor_token(self.caller)
             if self.counts_actor_tick:
                 self.caller.db.arena_ticks = int(self.caller.db.arena_ticks or 0) + 1
+                decay_social_score(self.caller)
             if self.counts_challenge_step:
                 record_challenge_step(self.caller, self.raw_string or self.key)
         return super().at_post_cmd()
