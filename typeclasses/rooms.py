@@ -78,11 +78,7 @@ class Room(DefaultRoom):
         return True, "Room admin acquired."
 
     def establish_admin(self, actor):
-        if self.db.admin_holder_id != actor.id or not self.is_established:
-            return False
-        if actor.db.admin_room_id == self.id:
-            actor.db.admin_room_id = None
-        return True
+        return bool(self.db.admin_holder_id == actor.id and self.is_established)
 
     def release_admin(self, actor):
         if self.db.admin_holder_id != actor.id:
