@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from evennia import DefaultCharacter, search_object
 
 
@@ -6,6 +8,11 @@ class Character(DefaultCharacter):
 
     def at_object_creation(self):
         super().at_object_creation()
+        self.db.arena_actor_token = uuid4().hex
+        self.db.xp = 0
+        self.db.active_challenge = None
+        self.db.pending_challenge_review = None
+
         lobbies = search_object("Arena Lobby", exact=True)
         lobby = next((obj for obj in lobbies if obj.tags.has("arena_lobby", category="rede")), None)
         if lobby:
