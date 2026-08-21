@@ -1,6 +1,6 @@
 import json
 
-from .challenge_runtime import ArenaCommand
+from .challenge_runtime import ArenaCommand, INITIAL_SOCIAL_SCORE
 
 GUESS_INTERVAL_TICKS = 20
 
@@ -17,7 +17,8 @@ class CmdScoreGuess(ArenaCommand):
 
     Other occupants see the guess and can observe the actor's score. The
     guessing actor never receives correctness, score, or score-delta feedback.
-    An exact guess doubles the hidden score.
+    An exact guess doubles the hidden score. The guess action itself is still
+    an actor tick, so normal five-percent tick decay applies afterward.
     """
 
     key = "score/guess"
@@ -36,11 +37,7 @@ class CmdScoreGuess(ArenaCommand):
         ticks = int(self.caller.db.arena_ticks or 0)
         next_tick = int(self.caller.db.next_score_guess_tick or GUESS_INTERVAL_TICKS)
         if ticks < next_tick:
-            _emit(
-                self.caller,
-                "score_guess_unavailable",
-                ticks_remaining=next_tick - ticks,
-            )
+            _emit(self.caller, "score_guess_unavailable", ticks_remaining=next_tick - ticks)
             return
 
         room = self.caller.location
@@ -64,15 +61,9 @@ class CmdScoreGuess(ArenaCommand):
                         )
                     )
 
-        hidden_score = int(self.caller.db.hidden_social_score or 1)
+        hidden_score = int(self.caller.db.hidden_social_score or INITIAL_SOCIAL_SCORE)
         if guess == hidden_score:
             self.caller.db.hidden_social_score = hidden_score * 2
 
         self.caller.db.next_score_guess_tick = ticks + GUESS_INTERVAL_TICKS
-
-        # Deliberately identical for correct and incorrect guesses.
-        _emit(
-            self.caller,
-            "score_guess_recorded",
-            next_guess_in_ticks=GUESS_INTERVAL_TICKS,
-        )
+        _emit(self.caller, "score_guess_recorded", next_guess_in_ticks=GUESS_INTERVAL_TICKS)
