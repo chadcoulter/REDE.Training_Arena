@@ -52,6 +52,8 @@ class CmdModelObserve(ArenaCommand):
 
         occupants = []
         exits = []
+        artifacts = []
+        things = []
         for obj in room.contents:
             if getattr(obj, "destination", None):
                 exits.append(
@@ -62,8 +64,22 @@ class CmdModelObserve(ArenaCommand):
                         "destination": obj.destination.key,
                     }
                 )
-            elif obj != self.caller:
+            elif obj == self.caller:
+                continue
+            elif obj.tags.has("room_artifact", category="arena"):
+                artifacts.append(
+                    {
+                        "id": obj.id,
+                        "key": obj.key,
+                        "decoration": obj.db.decoration or {},
+                        "latest_transform": obj.db.transform_signature,
+                        "latest_challenge_id": obj.db.challenge_id,
+                    }
+                )
+            elif obj.is_typeclass("typeclasses.characters.Character", exact=False):
                 occupants.append({"id": obj.id, "key": obj.key})
+            else:
+                things.append({"id": obj.id, "key": obj.key})
 
         _emit(
             self.caller,
@@ -71,6 +87,8 @@ class CmdModelObserve(ArenaCommand):
             actor={"id": self.caller.id, "key": self.caller.key, "xp": self.caller.db.xp or 0},
             room={"id": room.id, "key": room.key, "description": room.db.desc or ""},
             occupants=occupants,
+            artifacts=artifacts,
+            things=things,
             exits=exits,
             admin={
                 "holder_id": room.db.admin_holder_id,
