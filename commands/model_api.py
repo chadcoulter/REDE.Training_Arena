@@ -1,7 +1,8 @@
 import json
 
-from evennia import Command
 from evennia.utils.search import search_object
+
+from .challenge_runtime import ArenaCommand
 
 
 def _emit(caller, event, **payload):
@@ -35,7 +36,7 @@ def _resolve_teleport_target(query):
     return None, None, "Teleport target is ambiguous; use a unique name or dbref."
 
 
-class CmdModelObserve(Command):
+class CmdModelObserve(ArenaCommand):
     """Return the caller's current local world state as JSON."""
 
     key = "model/observe"
@@ -67,7 +68,7 @@ class CmdModelObserve(Command):
         _emit(
             self.caller,
             "observation",
-            actor={"id": self.caller.id, "key": self.caller.key},
+            actor={"id": self.caller.id, "key": self.caller.key, "xp": self.caller.db.xp or 0},
             room={"id": room.id, "key": room.key, "description": room.db.desc or ""},
             occupants=occupants,
             exits=exits,
@@ -78,7 +79,7 @@ class CmdModelObserve(Command):
         )
 
 
-class CmdModelSay(Command):
+class CmdModelSay(ArenaCommand):
     """Communicate with every participant in the current room."""
 
     key = "model/say"
@@ -98,7 +99,7 @@ class CmdModelSay(Command):
         _emit(self.caller, "said", text=text)
 
 
-class CmdModelMove(Command):
+class CmdModelMove(ArenaCommand):
     """Traverse a named exit as an ordinary actor."""
 
     key = "model/move"
@@ -130,7 +131,7 @@ class CmdModelMove(Command):
         )
 
 
-class CmdTeleport(Command):
+class CmdTeleport(ArenaCommand):
     """Teleport to any arena room or to the current room of another live agent.
 
     Usage:
@@ -167,7 +168,6 @@ class CmdTeleport(Command):
                 released, _ = room.release_admin(self.caller)
                 released_admin = bool(released)
             else:
-                # Clear stale actor state rather than allowing a lease marker to travel.
                 self.caller.db.admin_room_id = None
 
         if destination == self.caller.location:
