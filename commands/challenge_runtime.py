@@ -17,8 +17,8 @@ _DANGEROUS_PATTERNS = (
     re.compile(r"<\s*script\b", re.I),
     re.compile(r"javascript\s*:", re.I),
     re.compile(r"data\s*:\s*text/html", re.I),
-    re.compile(r"\{\{.*?\}\}", re.S),
-    re.compile(r"\{%.*?%\}", re.S),
+    re.compile(r"\{\{.*?\}\}\", re.S),
+    re.compile(r"\{%.*?%\}\", re.S),
     re.compile(r"\b(__import__|eval|exec)\s*\(", re.I),
 )
 
@@ -317,8 +317,15 @@ class ArenaCommand(Command):
         if hasattr(self.caller, "db"):
             ensure_actor_token(self.caller)
             if self.counts_actor_tick:
-                self.caller.db.arena_ticks = int(self.caller.db.arena_ticks or 0) + 1
+                current_tick = int(self.caller.db.arena_ticks or 0) + 1
+                self.caller.db.arena_ticks = current_tick
                 decay_social_score(self.caller)
+                self.caller.msg(
+                    json.dumps(
+                        {"event": "tick", "tick": current_tick},
+                        ensure_ascii=False,
+                    )
+                )
             if self.counts_challenge_step:
                 record_challenge_step(self.caller, self.raw_string or self.key)
         return super().at_post_cmd()
