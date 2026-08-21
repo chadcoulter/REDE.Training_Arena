@@ -1,4 +1,6 @@
-from evennia import Command, create_object
+from evennia import create_object
+
+from .challenge_runtime import ArenaCommand
 
 EXIT = "typeclasses.exits.Exit"
 
@@ -54,7 +56,7 @@ def _require_admin(caller):
     return room
 
 
-class CmdAdminDescribe(Command):
+class CmdAdminDescribe(ArenaCommand):
     """Replace the description of a non-core room currently administered."""
 
     key = "admin/describe"
@@ -76,7 +78,7 @@ class CmdAdminDescribe(Command):
         self.caller.msg("Room description updated.")
 
 
-class CmdAdminOpen(Command):
+class CmdAdminOpen(ArenaCommand):
     """Open one directional exit from the administered room to another arena room."""
 
     key = "admin/open"
