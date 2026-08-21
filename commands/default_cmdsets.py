@@ -18,7 +18,7 @@ from .model_login import CmdModelIdentify, CmdModelLogin
 from .room_admin import CmdAdminStatus, CmdReleaseAdmin, CmdRequestAdmin
 from .room_challenge import CmdChallengeDefinePublished
 from .room_mutation import CmdAdminDescribe, CmdAdminOpen
-from .room_review import CmdObjectInspect, CmdObjectVote, CmdRoomRate
+from .room_review import CmdObjectInspect, CmdObjectVote, CmdRoomRate, CmdRoomReviews
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -39,6 +39,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdObjectDecorate())
         self.add(CmdObjectShow())
         self.add(CmdRoomRate())
+        self.add(CmdRoomReviews())
         self.add(CmdObjectVote())
         self.add(CmdObjectInspect())
         self.add(CmdChallengeDefinePublished())
