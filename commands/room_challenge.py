@@ -18,6 +18,10 @@ class CmdChallengeDefinePublished(ArenaCommand):
     The admin may revise the challenge while it remains physically in the room.
     Once the established admin leaves for the first time, the room is published
     and both theatre description and challenge definition become immutable.
+
+    Every challenged room owns one persistent Room Review Board. The board is
+    created automatically when the room first receives a challenge and remains
+    attached to that room as consequence-free theatre feedback.
     """
 
     key = "challenge/define"
@@ -92,6 +96,17 @@ class CmdChallengeDefinePublished(ArenaCommand):
             "generated_xp": 0,
         }
         _save_new_challenge(room, challenge)
+
+        board = room.db.review_board
+        if not isinstance(board, dict):
+            board = {
+                "room_id": room.id,
+                "room_key": room.key,
+                "created_for_challenge_id": challenge["id"],
+                "evaluations": [],
+            }
+            room.db.review_board = board
+
         _emit(
             self.caller,
             "challenge_defined",
@@ -102,6 +117,7 @@ class CmdChallengeDefinePublished(ArenaCommand):
                 "target_steps": challenge["target_steps"],
                 "base_xp": challenge["base_xp"],
             },
+            review_board={"exists": True, "evaluation_count": len(board.get("evaluations", []))},
             room_established=room.is_established,
             publication="The theatre and challenge seal on the admin's first departure.",
         )
